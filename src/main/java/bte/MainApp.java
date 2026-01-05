@@ -2,8 +2,10 @@ package bte;
 
 import javafx.application.Application;
 import javafx.scene.Scene;
+import javafx.scene.control.Label;
 import javafx.scene.input.KeyCode;
 import javafx.scene.layout.BorderPane;
+import javafx.scene.layout.HBox;
 import javafx.scene.web.HTMLEditor;
 import javafx.stage.FileChooser;
 import javafx.stage.Stage;
@@ -22,6 +24,8 @@ public class MainApp extends Application {
 
     private File currentFile;
     private HTMLEditor editor;
+    private Label wordCountLabel = new Label("Words: 0");
+    private Label charCoundLabel = new Label("Chars: 0");
 
     @Override
     public void start(Stage stage) {
@@ -43,10 +47,15 @@ public class MainApp extends Application {
         MenuBar menuBar = new MenuBar(fileMenu);
         root.setTop(menuBar);
         root.setCenter(editor);
+        root.setBottom(wordCountLabel);
+
 
         saveAsItem.setOnAction( e -> saveFile(stage));
 
-
+        HBox statusBar = new HBox(70);
+        statusBar.setStyle("-fx-padding: 6; -fx-border-color: #ddd; -fx-border-width: 1 0 0 0;");
+        statusBar.getChildren().addAll(wordCountLabel, charCoundLabel);
+        root.setBottom(statusBar);
         // 3. Setup the Scene
         Scene scene = new Scene(root, 1000, 700);
         scene.setOnKeyPressed( event -> {
@@ -55,6 +64,13 @@ public class MainApp extends Application {
                 event.consume();
             }
         });
+        newItem.setOnAction( e -> {
+            editor.setHtmlText("");
+            currentFile = null;
+            updateStatus();
+        });
+
+        editor.setOnKeyReleased( event -> updateStatus());
         stage.setTitle("Burak's Word Application");
         stage.setScene(scene);
         stage.show();
@@ -84,11 +100,24 @@ public class MainApp extends Application {
                 String html = Files.readString(file.toPath());
                 editor.setHtmlText(html);
                 currentFile = file ;
+                updateStatus();
             }
             catch (IOException e) {
                 e.printStackTrace();
             }
         }
+    }
+
+    private void updateStatus() {
+        String text = editor.getHtmlText()
+                .replaceAll("<[^>]*>", "") // strip HTML tags
+                .trim();
+
+        int chars = text.length();
+        int words = text.isEmpty() ? 0 : text.split("\\s+").length;
+
+        wordCountLabel.setText("Words: " + words);
+        charCoundLabel.setText("Chars: " + chars);
     }
 
     private void saveFile(Stage stage) {
@@ -101,6 +130,7 @@ public class MainApp extends Application {
         if (file != null) {
             try{
                 Files.writeString(file.toPath(),editor.getHtmlText());
+                updateStatus();
             }
             catch (IOException e) {
                 e.printStackTrace();
