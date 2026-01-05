@@ -5,6 +5,10 @@ import javafx.scene.Scene;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.web.HTMLEditor;
 import javafx.stage.Stage;
+import javafx.scene.control.Menu;
+import javafx.scene.control.MenuBar;
+import javafx.scene.control.MenuItem;
+
 
 public class MainApp extends Application {
 
@@ -17,7 +21,18 @@ public class MainApp extends Application {
 
         // 2. Use a BorderPane to let the editor fill the window
         BorderPane root = new BorderPane();
+
+
+        Menu fileMenu = new Menu("File");
+        MenuItem newItem = new MenuItem("New");
+        MenuItem openItem = new MenuItem("Open");
+        MenuItem saveAsItem = new MenuItem("Save as");
+
+        fileMenu.getItems().addAll(newItem, openItem, saveAsItem);
+        MenuBar menuBar = new MenuBar(fileMenu);
+        root.setTop(menuBar);
         root.setCenter(editor);
+
 
         // 3. Setup the Scene
         Scene scene = new Scene(root, 1000, 700);
