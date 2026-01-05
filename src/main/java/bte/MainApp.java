@@ -41,6 +41,8 @@ public class MainApp extends Application {
         root.setTop(menuBar);
         root.setCenter(editor);
 
+        saveAsItem.setOnAction( e -> saveFile(stage));
+
 
         // 3. Setup the Scene
         Scene scene = new Scene(root, 1000, 700);
@@ -62,6 +64,23 @@ public class MainApp extends Application {
                 String html = Files.readString(file.toPath());
                 editor.setHtmlText(html);
                 currentFile = file ;
+            }
+            catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+
+    private void saveFile(Stage stage) {
+        FileChooser chooser = new FileChooser();
+        chooser.getExtensionFilters().add(
+                new FileChooser.ExtensionFilter("Html Files", "*.html")
+        );
+
+        File file = chooser.showSaveDialog(stage);
+        if (file != null) {
+            try{
+                Files.writeString(file.toPath(),editor.getHtmlText());
             }
             catch (IOException e) {
                 e.printStackTrace();
