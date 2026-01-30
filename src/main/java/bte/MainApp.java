@@ -3,6 +3,8 @@ package bte;
 import javafx.application.Application;
 
 import javafx.collections.FXCollections;
+import java.util.ArrayList;
+import java.util.List;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
@@ -28,7 +30,6 @@ import javafx.scene.shape.SVGPath;
 import java.io.*;
 import java.net.URL;
 
-
 // TODO
 public class MainApp extends Application {
 
@@ -36,7 +37,8 @@ public class MainApp extends Application {
     private static final double PAGE_HEIGHT = 842;
     private static final double MARGIN = 50;
 
-    private CustomEditor editor;
+    private List<CustomEditor> editors = new ArrayList<>();
+    private int currentEditorIndex = 0;
     private File currentFile;
     private boolean isDirty = false;
 
@@ -75,14 +77,27 @@ public class MainApp extends Application {
     private static final double MAX_CONTENT_HEIGHT = PAGE_HEIGHT - (MARGIN * 2);
 
     private VBox documentBackground;
+    private ScrollPane scrollPane;
+
+    // Helper method to get the current active editor
+    private CustomEditor getCurrentEditor() {
+        if (editors.isEmpty()) {
+            return null;
+        }
+        return editors.get(currentEditorIndex);
+    }
 
     private void checkPageOverflow() {
         // Layout güncellendikten SONRA ölçüm yapması için runLater kullanıyoruz
         javafx.application.Platform.runLater(() -> {
-            double contentHeight = editor.getTotalHeightEstimate();
+            CustomEditor currentEditor = getCurrentEditor();
+            if (currentEditor == null)
+                return;
+
+            double contentHeight = currentEditor.getTotalHeightEstimate();
 
             // Debug için konsola yüksekliği yazdıralım
-            // System.out.println("Yükseklik: " + contentHeight + " / Sınır: " + MAX_CONTENT_HEIGHT);
+            System.out.println("Yükseklik: " + contentHeight + " / Sınır: " + MAX_CONTENT_HEIGHT);
 
             if (contentHeight > MAX_CONTENT_HEIGHT) {
                 System.out.println("Taşma gerçekleşti! Yeni sayfa açılıyor...");
@@ -90,58 +105,79 @@ public class MainApp extends Application {
             }
         });
     }
+
     private void addNewPage() {
-        if (this.editor != null) {
-            this.editor.setDisable(true);
+        // Make the current (overflowing) editor read-only
+        CustomEditor oldEditor = getCurrentEditor();
+        if (oldEditor != null) {
+            oldEditor.setEditable(false); // Eski sayfayı read-only yap
         }
 
         CustomEditor newEditor = new CustomEditor();
         newEditor.setWrapText(true);
         newEditor.setStyle("-fx-font-family: 'Segoe UI'; -fx-font-size: 14px;");
 
-        this.editor = newEditor;
+        // Add to editors list
+        editors.add(newEditor);
+        currentEditorIndex = editors.size() - 1;
 
         setupEditorListeners(newEditor);
 
         VBox newPage = createPage(newEditor);
-
         documentBackground.getChildren().add(newPage);
 
-        newEditor.requestFocus();
+        // Forcefully set focus to new editor
+        javafx.application.Platform.runLater(() -> {
+            newEditor.requestFocus();
+            newEditor.moveTo(0); // Cursor'u başa al
+
+            // Scroll to the new page automatically
+            if (scrollPane != null) {
+                scrollPane.setVvalue(1.0); // Scroll to bottom
+            }
+        });
     }
-    private void setupEditorListeners(CustomEditor targetEditor){
+
+    private void setupEditorListeners(CustomEditor targetEditor) {
         targetEditor.textProperty().addListener((obs, oldText, newText) -> {
             isDirty = true;
             updateWordCount();
             checkPageOverflow();
+
+            // Auto-scroll to keep cursor visible
+            javafx.application.Platform.runLater(() -> {
+                targetEditor.requestFollowCaret();
+            });
         });
 
         targetEditor.multiPlainChanges().subscribe(changes -> {
-           for (var change : changes){
-               if(!change.getInserted().isEmpty()){
-                   int pos = change.getPosition();
-                   int length = change.getInserted().length();
-                   targetEditor.setStyle(pos,pos+length,currentTypingStyle);
-               }
-           }
+            for (var change : changes) {
+                if (!change.getInserted().isEmpty()) {
+                    int pos = change.getPosition();
+                    int length = change.getInserted().length();
+                    targetEditor.setStyle(pos, pos + length, currentTypingStyle);
+                }
+            }
         });
     }
-
 
     @Override
     public void start(Stage stage) {
         documentBackground = new VBox(30);
-        // Create the rich text editor
-        editor = new CustomEditor();
-        editor.setWrapText(true);
-        editor.setStyle("-fx-font-family: 'Segoe UI'; -fx-font-size: 14px;");
+        // Create the first rich text editor
+        CustomEditor firstEditor = new CustomEditor();
+        firstEditor.setWrapText(true);
+        firstEditor.setStyle("-fx-font-family: 'Segoe UI'; -fx-font-size: 14px;");
 
-        VBox pageContainer = createPageView();
+        // Add to editors list
+        editors.add(firstEditor);
+        currentEditorIndex = 0;
+
         documentBackground.setStyle("-fx-background-color:#505050;");
         documentBackground.setAlignment(Pos.TOP_CENTER);
         documentBackground.setPadding(new Insets(30));
 
-        VBox firstPage = createPage(editor);
+        VBox firstPage = createPage(firstEditor);
         documentBackground.getChildren().add(firstPage);
         // Layout
         BorderPane root = new BorderPane();
@@ -156,7 +192,7 @@ public class MainApp extends Application {
         root.setTop(topContainer);
 
         // Editor with scroll
-        ScrollPane scrollPane = new ScrollPane(documentBackground);
+        scrollPane = new ScrollPane(documentBackground);
         scrollPane.setFitToWidth(true);
         scrollPane.setFitToHeight(false);
         scrollPane.setStyle("-fx-background: #505050; -fx-border-color:transparent;");
@@ -181,7 +217,7 @@ public class MainApp extends Application {
         // Başlangıç stilini ayarla
         currentTypingStyle = buildStyleString();
 
-        setupEditorListeners(editor);
+        setupEditorListeners(firstEditor);
         stage.setTitle("Burak's Word Processor");
         stage.setScene(scene);
         stage.setOnCloseRequest(e -> {
@@ -191,28 +227,7 @@ public class MainApp extends Application {
         });
         stage.show();
 
-        editor.requestFocus();
-    }
-
-    private VBox createPageView() {
-        VBox pageContainer = new VBox();
-        pageContainer.setPrefWidth(PAGE_WIDTH);
-        pageContainer.setPrefHeight(PAGE_HEIGHT);
-        pageContainer.setStyle("-fx-background-color: white; -fx-border-color: black; -fx-border-width: 1px;");
-        pageContainer.setPadding(new Insets(MARGIN));
-        pageContainer.getChildren().add(editor);
-
-        editor.setPrefWidth(PAGE_WIDTH - (MARGIN * 2));
-        editor.setPrefHeight(PAGE_HEIGHT - (MARGIN * 2));
-
-        DropShadow shadow = new DropShadow();
-        shadow.setRadius(15);
-        shadow.setOffsetX(5);
-        shadow.setOffsetY(5);
-        shadow.setColor(Color.gray(0.4));
-        pageContainer.setEffect(shadow);
-
-        return pageContainer;
+        getCurrentEditor().requestFocus();
     }
 
     private void printDocument(Stage stage) {
@@ -222,7 +237,7 @@ public class MainApp extends Application {
             return;
         }
         if (job.showPrintDialog(stage)) {
-            boolean success = job.printPage(editor);
+            boolean success = job.printPage(getCurrentEditor());
             if (success) {
                 job.endJob();
             }
@@ -278,27 +293,27 @@ public class MainApp extends Application {
 
         MenuItem undoItem = new MenuItem("Undo");
         undoItem.setAccelerator(new KeyCodeCombination(KeyCode.Z, KeyCombination.CONTROL_DOWN));
-        undoItem.setOnAction(e -> editor.undo());
+        undoItem.setOnAction(e -> getCurrentEditor().undo());
 
         MenuItem redoItem = new MenuItem("Redo");
         redoItem.setAccelerator(new KeyCodeCombination(KeyCode.Y, KeyCombination.CONTROL_DOWN));
-        redoItem.setOnAction(e -> editor.redo());
+        redoItem.setOnAction(e -> getCurrentEditor().redo());
 
         MenuItem cutItem = new MenuItem("Cut");
         cutItem.setAccelerator(new KeyCodeCombination(KeyCode.X, KeyCombination.CONTROL_DOWN));
-        cutItem.setOnAction(e -> editor.cut());
+        cutItem.setOnAction(e -> getCurrentEditor().cut());
 
         MenuItem copyItem = new MenuItem("Copy");
         copyItem.setAccelerator(new KeyCodeCombination(KeyCode.C, KeyCombination.CONTROL_DOWN));
-        copyItem.setOnAction(e -> editor.copy());
+        copyItem.setOnAction(e -> getCurrentEditor().copy());
 
         MenuItem pasteItem = new MenuItem("Paste");
         pasteItem.setAccelerator(new KeyCodeCombination(KeyCode.V, KeyCombination.CONTROL_DOWN));
-        pasteItem.setOnAction(e -> editor.paste());
+        pasteItem.setOnAction(e -> getCurrentEditor().paste());
 
         MenuItem selectAllItem = new MenuItem("Select All");
         selectAllItem.setAccelerator(new KeyCodeCombination(KeyCode.A, KeyCombination.CONTROL_DOWN));
-        selectAllItem.setOnAction(e -> editor.selectAll());
+        selectAllItem.setOnAction(e -> getCurrentEditor().selectAll());
 
         MenuItem findItem = new MenuItem("Find...");
         findItem.setAccelerator(new KeyCodeCombination(KeyCode.F, KeyCombination.CONTROL_DOWN));
@@ -458,7 +473,7 @@ public class MainApp extends Application {
                 "M20 2H4c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM8 20H4v-4h4v4zm0-6H4v-4h4v4zm0-6H4V4h4v4zm6 12h-4v-4h4v4zm0-6h-4v-4h4v4zm0-6h-4V4h4v4zm6 12h-4v-4h4v4zm0-6h-4v-4h4v4zm0-6h-4V4h4v4z"));
         insertTableBtn.setTooltip(new Tooltip("Insert Table"));
         // Artık picker'ı çağırıyoruz ve butonu (tableButton) parametre veriyoruz
-        insertTableBtn.setOnAction(e -> ContentInserter.openTablePicker(editor, insertTableBtn));
+        insertTableBtn.setOnAction(e -> ContentInserter.openTablePicker(getCurrentEditor(), insertTableBtn));
 
         javafx.scene.control.ToggleButton themeToggle = new javafx.scene.control.ToggleButton("🌙");
         themeToggle.setStyle("-fx-font-size: 14px; -fx-min-width: 40px;");
@@ -575,7 +590,7 @@ public class MainApp extends Application {
                 } else {
                     textColorPicker.setValue(color);
                 }
-                editor.requestFocus();
+                getCurrentEditor().requestFocus();
                 applyStyle(); // Yazıya uygula
                 menuBtn.hide();
             });
@@ -602,7 +617,7 @@ public class MainApp extends Application {
         return menuBtn;
     }
 
-    private VBox createPage(CustomEditor contentEditor){
+    private VBox createPage(CustomEditor contentEditor) {
         VBox page = new VBox();
 
         page.setPrefWidth(PAGE_WIDTH);
@@ -612,7 +627,7 @@ public class MainApp extends Application {
         page.setStyle("-fx-background-color: white;");
         page.setPadding(new Insets(MARGIN));
 
-        if (contentEditor != null){
+        if (contentEditor != null) {
             page.getChildren().add(contentEditor);
             contentEditor.setPrefWidth(PAGE_WIDTH - (MARGIN * 2));
             contentEditor.setPrefHeight(PAGE_HEIGHT - (MARGIN * 2));
@@ -622,7 +637,7 @@ public class MainApp extends Application {
         shadow.setRadius(20);
         shadow.setOffsetX(0);
         shadow.setOffsetY(5);
-        shadow.setColor(Color.rgb(0,0,0,0.2));
+        shadow.setColor(Color.rgb(0, 0, 0, 0.2));
         page.setEffect(shadow);
         return page;
     }
@@ -651,11 +666,11 @@ public class MainApp extends Application {
         if (searchText == null || searchText.isEmpty()) {
             return;
         }
-        String content = editor.getText();
+        String content = getCurrentEditor().getText();
         int index = content.indexOf(searchText);
         if (index >= 0) {
-            editor.selectRange(index, index + searchText.length());
-            editor.requestFollowCaret();
+            getCurrentEditor().selectRange(index, index + searchText.length());
+            getCurrentEditor().requestFollowCaret();
 
         } else {
             Alert alert = new Alert(Alert.AlertType.INFORMATION);
@@ -746,20 +761,20 @@ public class MainApp extends Application {
     }
 
     private void findNextText(String searchText) {
-        String content = editor.getText();
+        String content = getCurrentEditor().getText();
         int index = content.indexOf(searchText, lastSearchIndex);
 
         if (index >= 0) {
-            editor.selectRange(index, index + searchText.length());
-            editor.requestFollowCaret();
+            getCurrentEditor().selectRange(index, index + searchText.length());
+            getCurrentEditor().requestFollowCaret();
             lastSearchIndex = index + 1;
         } else if (lastSearchIndex > 0) {
             // Wrap around to beginning
             lastSearchIndex = 0;
             index = content.indexOf(searchText, 0);
             if (index >= 0) {
-                editor.selectRange(index, index + searchText.length());
-                editor.requestFollowCaret();
+                getCurrentEditor().selectRange(index, index + searchText.length());
+                getCurrentEditor().requestFollowCaret();
                 lastSearchIndex = index + 1;
             } else {
                 showNotFound(searchText);
@@ -770,9 +785,9 @@ public class MainApp extends Application {
     }
 
     private void replaceCurrentSelection(String searchText, String replaceText) {
-        String selectedText = editor.getSelectedText();
+        String selectedText = getCurrentEditor().getSelectedText();
         if (selectedText.equals(searchText)) {
-            editor.replaceSelection(replaceText);
+            getCurrentEditor().replaceSelection(replaceText);
             findNextText(searchText);
         } else {
             findNextText(searchText);
@@ -780,7 +795,7 @@ public class MainApp extends Application {
     }
 
     private void replaceAllText(String searchText, String replaceText) {
-        String content = editor.getText();
+        String content = getCurrentEditor().getText();
         int count = 0;
         int index = 0;
 
@@ -791,7 +806,7 @@ public class MainApp extends Application {
 
         if (count > 0) {
             String newContent = content.replace(searchText, replaceText);
-            editor.replaceText(newContent);
+            getCurrentEditor().replaceText(newContent);
 
             Alert alert = new Alert(Alert.AlertType.INFORMATION);
             alert.setTitle("Replace All");
@@ -819,7 +834,7 @@ public class MainApp extends Application {
         alignJustifyBtn.setSelected(alignment.equals("JUSTIFY"));
 
         // Get the current paragraph index
-        int currentParagraph = editor.getCurrentParagraph();
+        int currentParagraph = getCurrentEditor().getCurrentParagraph();
 
         // Build the CSS style for paragraph alignment
         String alignStyle;
@@ -840,7 +855,7 @@ public class MainApp extends Application {
         }
 
         // Apply paragraph style to current paragraph
-        editor.setParagraphStyle(currentParagraph, alignStyle);
+        getCurrentEditor().setParagraphStyle(currentParagraph, alignStyle);
     }
 
     private HBox createStatusBar() {
@@ -883,10 +898,10 @@ public class MainApp extends Application {
 
     private void applyStyle() {
         String style = buildStyleString();
-        IndexRange selection = editor.getSelection();
+        IndexRange selection = getCurrentEditor().getSelection();
 
         if (selection.getLength() > 0) {
-            editor.setStyle(selection.getStart(), selection.getEnd(), style);
+            getCurrentEditor().setStyle(selection.getStart(), selection.getEnd(), style);
         }
 
         // Her durumda gelecekteki yazılar için stili güncelle
@@ -894,10 +909,10 @@ public class MainApp extends Application {
 
         // İmleç rengini de değiştir (Word Web gibi)
         Color caretColor = textColorPicker.getValue();
-        editor.setStyle(String.format("-fx-font-family: 'Segoe UI'; -fx-font-size: 14px; " +
+        getCurrentEditor().setStyle(String.format("-fx-font-family: 'Segoe UI'; -fx-font-size: 14px; " +
                 "caret-color: %s;", toHexString(caretColor)));
 
-        editor.requestFocus();
+        getCurrentEditor().requestFocus();
     }
 
     private String buildStyleString() {
@@ -966,7 +981,14 @@ public class MainApp extends Application {
     }
 
     private void updateWordCount() {
-        String text = editor.getText();
+        // Aggregate text from all editors
+        StringBuilder allText = new StringBuilder();
+        for (CustomEditor ed : editors) {
+            if (ed != null) {
+                allText.append(ed.getText());
+            }
+        }
+        String text = allText.toString();
         int chars = text.length();
         int words = text.trim().isEmpty() ? 0 : text.trim().split("\\s+").length;
 
@@ -978,7 +1000,23 @@ public class MainApp extends Application {
         if (!confirmDiscard(stage))
             return;
 
-        editor.clear();
+        // Clear all editors and pages
+        editors.clear();
+        documentBackground.getChildren().clear();
+
+        // Create a new first editor
+        CustomEditor firstEditor = new CustomEditor();
+        firstEditor.setWrapText(true);
+        firstEditor.setStyle("-fx-font-family: 'Segoe UI'; -fx-font-size: 14px;");
+
+        editors.add(firstEditor);
+        currentEditorIndex = 0;
+
+        VBox firstPage = createPage(firstEditor);
+        documentBackground.getChildren().add(firstPage);
+
+        setupEditorListeners(firstEditor);
+
         currentFile = null;
         isDirty = false;
         stage.setTitle("Burak's Word Processor");
@@ -1010,7 +1048,7 @@ public class MainApp extends Application {
                     while ((line = reader.readLine()) != null) {
                         content.append(line).append("\n");
                     }
-                    editor.replaceText(content.toString());
+                    getCurrentEditor().replaceText(content.toString());
                     currentFile = file;
                     isDirty = false;
                     stage.setTitle("Burak's Word Processor - " + file.getName());
@@ -1040,7 +1078,7 @@ public class MainApp extends Application {
                 content.append("\n");
             }
 
-            editor.replaceText(content.toString());
+            getCurrentEditor().replaceText(content.toString());
             document.close();
             fis.close();
         } catch (IOException e) {
@@ -1052,7 +1090,7 @@ public class MainApp extends Application {
         try (XWPFDocument document = new XWPFDocument()) {
             XWPFParagraph paragraph = document.createParagraph();
             XWPFRun run = paragraph.createRun();
-            run.setText(editor.getText());
+            run.setText(getCurrentEditor().getText());
             document.write(new FileOutputStream(file));
         } catch (IOException e) {
             showError("Error saving file", e.getMessage());
@@ -1083,7 +1121,7 @@ public class MainApp extends Application {
 
     private void saveToFile(File file, Stage stage) {
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(file))) {
-            writer.write(editor.getText());
+            writer.write(getCurrentEditor().getText());
             currentFile = file;
             isDirty = false;
             stage.setTitle("Burak's Word Processor - " + file.getName());
@@ -1136,12 +1174,12 @@ public class MainApp extends Application {
     }
 
     private void insertImage(Stage stage) {
-        ContentInserter.insertImage(editor, stage);
+        ContentInserter.insertImage(getCurrentEditor(), stage);
         isDirty = true;
     }
 
     private void insertTable(Stage stage) {
-        ContentInserter.openTablePicker(editor, insertTableBtn);
+        ContentInserter.openTablePicker(getCurrentEditor(), insertTableBtn);
         isDirty = true;
     }
 
@@ -1159,7 +1197,7 @@ public class MainApp extends Application {
         File file = chooser.showSaveDialog(stage);
         if (file != null) {
             try {
-                PDFExporter.export(editor, file);
+                PDFExporter.export(getCurrentEditor(), file);
                 Alert alert = new Alert(Alert.AlertType.INFORMATION);
                 alert.setTitle("Export Successful");
                 alert.setHeaderText(null);
