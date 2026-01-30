@@ -4,15 +4,13 @@ import javafx.application.Application;
 
 import javafx.collections.FXCollections;
 import javafx.geometry.Insets;
+import javafx.geometry.Pos;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyCodeCombination;
 import javafx.scene.input.KeyCombination;
-import javafx.scene.layout.BorderPane;
-import javafx.scene.layout.GridPane;
-import javafx.scene.layout.HBox;
-import javafx.scene.layout.VBox;
+import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
 import javafx.stage.FileChooser;
 import javafx.stage.Stage;
@@ -74,14 +72,77 @@ public class MainApp extends Application {
 
     private String currentTypingStyle = "";
 
+    private static final double MAX_CONTENT_HEIGHT = PAGE_HEIGHT - (MARGIN * 2);
+
+    private VBox documentBackground;
+
+    private void checkPageOverflow() {
+        // Layout güncellendikten SONRA ölçüm yapması için runLater kullanıyoruz
+        javafx.application.Platform.runLater(() -> {
+            double contentHeight = editor.getTotalHeightEstimate();
+
+            // Debug için konsola yüksekliği yazdıralım
+            // System.out.println("Yükseklik: " + contentHeight + " / Sınır: " + MAX_CONTENT_HEIGHT);
+
+            if (contentHeight > MAX_CONTENT_HEIGHT) {
+                System.out.println("Taşma gerçekleşti! Yeni sayfa açılıyor...");
+                addNewPage();
+            }
+        });
+    }
+    private void addNewPage() {
+        if (this.editor != null) {
+            this.editor.setDisable(true);
+        }
+
+        CustomEditor newEditor = new CustomEditor();
+        newEditor.setWrapText(true);
+        newEditor.setStyle("-fx-font-family: 'Segoe UI'; -fx-font-size: 14px;");
+
+        this.editor = newEditor;
+
+        setupEditorListeners(newEditor);
+
+        VBox newPage = createPage(newEditor);
+
+        documentBackground.getChildren().add(newPage);
+
+        newEditor.requestFocus();
+    }
+    private void setupEditorListeners(CustomEditor targetEditor){
+        targetEditor.textProperty().addListener((obs, oldText, newText) -> {
+            isDirty = true;
+            updateWordCount();
+            checkPageOverflow();
+        });
+
+        targetEditor.multiPlainChanges().subscribe(changes -> {
+           for (var change : changes){
+               if(!change.getInserted().isEmpty()){
+                   int pos = change.getPosition();
+                   int length = change.getInserted().length();
+                   targetEditor.setStyle(pos,pos+length,currentTypingStyle);
+               }
+           }
+        });
+    }
+
+
     @Override
     public void start(Stage stage) {
+        documentBackground = new VBox(30);
         // Create the rich text editor
         editor = new CustomEditor();
         editor.setWrapText(true);
         editor.setStyle("-fx-font-family: 'Segoe UI'; -fx-font-size: 14px;");
 
         VBox pageContainer = createPageView();
+        documentBackground.setStyle("-fx-background-color:#505050;");
+        documentBackground.setAlignment(Pos.TOP_CENTER);
+        documentBackground.setPadding(new Insets(30));
+
+        VBox firstPage = createPage(editor);
+        documentBackground.getChildren().add(firstPage);
         // Layout
         BorderPane root = new BorderPane();
 
@@ -95,11 +156,11 @@ public class MainApp extends Application {
         root.setTop(topContainer);
 
         // Editor with scroll
-        ScrollPane scrollPane = new ScrollPane(pageContainer);
-        scrollPane.setFitToWidth(false);
+        ScrollPane scrollPane = new ScrollPane(documentBackground);
+        scrollPane.setFitToWidth(true);
         scrollPane.setFitToHeight(false);
+        scrollPane.setStyle("-fx-background: #505050; -fx-border-color:transparent;");
         root.setCenter(scrollPane);
-
         // Status Bar
         HBox statusBar = createStatusBar();
         root.setBottom(statusBar);
@@ -120,25 +181,7 @@ public class MainApp extends Application {
         // Başlangıç stilini ayarla
         currentTypingStyle = buildStyleString();
 
-        // Yeni yazılan metne stil uygula - RichTextFX için doğru yaklaşım
-        editor.multiPlainChanges()
-                .subscribe(changes -> {
-                    for (var change : changes) {
-                        if (!change.getInserted().isEmpty()) {
-                            int pos = change.getPosition();
-                            int length = change.getInserted().length();
-                            // Platform.runLater kullanmadan direkt uygula
-                            editor.setStyle(pos, pos + length, currentTypingStyle);
-                        }
-                    }
-                });
-
-        // Metin değişikliklerini takip et
-        editor.textProperty().addListener((obs, oldText, newText) -> {
-            isDirty = true;
-            updateWordCount();
-        });
-
+        setupEditorListeners(editor);
         stage.setTitle("Burak's Word Processor");
         stage.setScene(scene);
         stage.setOnCloseRequest(e -> {
@@ -557,6 +600,31 @@ public class MainApp extends Application {
         menuBtn.getItems().add(customMenuItem);
 
         return menuBtn;
+    }
+
+    private VBox createPage(CustomEditor contentEditor){
+        VBox page = new VBox();
+
+        page.setPrefWidth(PAGE_WIDTH);
+        page.setPrefHeight(PAGE_HEIGHT);
+        page.setMinHeight(PAGE_HEIGHT);
+        page.setMaxHeight(PAGE_HEIGHT);
+        page.setStyle("-fx-background-color: white;");
+        page.setPadding(new Insets(MARGIN));
+
+        if (contentEditor != null){
+            page.getChildren().add(contentEditor);
+            contentEditor.setPrefWidth(PAGE_WIDTH - (MARGIN * 2));
+            contentEditor.setPrefHeight(PAGE_HEIGHT - (MARGIN * 2));
+        }
+
+        DropShadow shadow = new DropShadow();
+        shadow.setRadius(20);
+        shadow.setOffsetX(0);
+        shadow.setOffsetY(5);
+        shadow.setColor(Color.rgb(0,0,0,0.2));
+        page.setEffect(shadow);
+        return page;
     }
 
     private void showFindDialog(Stage stage) {
