@@ -38,9 +38,14 @@ public class MainApp extends Application {
     private static final double MARGIN = 50;
 
     private List<CustomEditor> editors = new ArrayList<>();
+    private List<CustomEditor> headerEditors = new ArrayList<>();
+    private List<CustomEditor> footerEditors = new ArrayList<>();
     private int currentEditorIndex = 0;
     private File currentFile;
     private boolean isDirty = false;
+
+    // Header/Footer management
+    private HeaderFooterManager headerFooterManager = new HeaderFooterManager();
 
     private Label wordCountLabel;
     private Label charCountLabel;
@@ -123,7 +128,8 @@ public class MainApp extends Application {
 
         setupEditorListeners(newEditor);
 
-        VBox newPage = createPage(newEditor);
+        int pageNumber = editors.size();
+        VBox newPage = createPage(newEditor, pageNumber);
         documentBackground.getChildren().add(newPage);
 
         // Forcefully set focus to new editor
@@ -177,7 +183,7 @@ public class MainApp extends Application {
         documentBackground.setAlignment(Pos.TOP_CENTER);
         documentBackground.setPadding(new Insets(30));
 
-        VBox firstPage = createPage(firstEditor);
+        VBox firstPage = createPage(firstEditor, 1);
         documentBackground.getChildren().add(firstPage);
         // Layout
         BorderPane root = new BorderPane();
@@ -345,7 +351,17 @@ public class MainApp extends Application {
         MenuItem tableItem = new MenuItem("Table...");
         tableItem.setOnAction(e -> insertTable(stage));
 
-        insertMenu.getItems().addAll(imageItem, tableItem);
+        MenuItem headerItem = new MenuItem("Header...");
+        headerItem.setOnAction(e -> showHeaderDialog(stage));
+
+        MenuItem footerItem = new MenuItem("Footer...");
+        footerItem.setOnAction(e -> showFooterDialog(stage));
+
+        MenuItem pageNumberItem = new MenuItem("Page Numbers...");
+        pageNumberItem.setOnAction(e -> showPageNumberDialog(stage));
+
+        insertMenu.getItems().addAll(imageItem, tableItem, new SeparatorMenuItem(),
+                headerItem, footerItem, pageNumberItem);
         return insertMenu;
     }
 
@@ -617,7 +633,7 @@ public class MainApp extends Application {
         return menuBtn;
     }
 
-    private VBox createPage(CustomEditor contentEditor) {
+    private VBox createPage(CustomEditor contentEditor, int pageNumber) {
         VBox page = new VBox();
 
         page.setPrefWidth(PAGE_WIDTH);
@@ -627,11 +643,29 @@ public class MainApp extends Application {
         page.setStyle("-fx-background-color: white;");
         page.setPadding(new Insets(MARGIN));
 
+        // Create header editor
+        CustomEditor headerEditor = CustomEditor.createHeaderFooterEditor(false);
+        String headerContent = headerFooterManager.getCompleteHeaderForPage(pageNumber);
+        headerEditor.replaceText(0, 0, headerContent);
+        headerEditors.add(headerEditor);
+
+        // Create footer editor
+        CustomEditor footerEditor = CustomEditor.createHeaderFooterEditor(false);
+        String footerContent = headerFooterManager.getCompleteFooterForPage(pageNumber);
+        footerEditor.replaceText(0, 0, footerContent);
+        footerEditors.add(footerEditor);
+
+        // Calculate adjusted height for content editor
+        double headerFooterHeight = 80; // 40px each for header and footer
+        double contentHeight = PAGE_HEIGHT - (MARGIN * 2) - headerFooterHeight;
+
         if (contentEditor != null) {
-            page.getChildren().add(contentEditor);
             contentEditor.setPrefWidth(PAGE_WIDTH - (MARGIN * 2));
-            contentEditor.setPrefHeight(PAGE_HEIGHT - (MARGIN * 2));
+            contentEditor.setPrefHeight(contentHeight);
         }
+
+        // Add all components: header, content, footer
+        page.getChildren().addAll(headerEditor, contentEditor, footerEditor);
 
         DropShadow shadow = new DropShadow();
         shadow.setRadius(20);
@@ -1012,7 +1046,7 @@ public class MainApp extends Application {
         editors.add(firstEditor);
         currentEditorIndex = 0;
 
-        VBox firstPage = createPage(firstEditor);
+        VBox firstPage = createPage(firstEditor, 1);
         documentBackground.getChildren().add(firstPage);
 
         setupEditorListeners(firstEditor);
@@ -1215,6 +1249,196 @@ public class MainApp extends Application {
         icon.setContent(content);
         icon.getStyleClass().add("icon");
         return icon;
+    }
+
+    private void showHeaderDialog(Stage stage) {
+        Dialog<String> dialog = new Dialog<>();
+        dialog.setTitle("Edit Header");
+        dialog.setHeaderText("Enter header content:");
+
+        VBox content = new VBox(10);
+        content.setPadding(new Insets(10));
+
+        TextArea headerText = new TextArea();
+        headerText.setPrefRowCount(3);
+        headerText.setPromptText("Type your header text here...");
+
+        CheckBox differentFirstPage = new CheckBox("Different first page");
+        differentFirstPage.setSelected(headerFooterManager.isDifferentFirstPage());
+
+        Label firstPageLabel = new Label("First page header:");
+        firstPageLabel.setVisible(differentFirstPage.isSelected());
+        TextArea firstPageText = new TextArea();
+        firstPageText.setPrefRowCount(2);
+        firstPageText.setVisible(differentFirstPage.isSelected());
+
+        differentFirstPage.setOnAction(e -> {
+            boolean selected = differentFirstPage.isSelected();
+            firstPageLabel.setVisible(selected);
+            firstPageText.setVisible(selected);
+        });
+
+        // Load existing content
+        headerText.setText(headerFooterManager.getDefaultHeaderContent());
+        firstPageText.setText(headerFooterManager.getFirstPageHeaderContent());
+
+        content.getChildren().addAll(
+                new Label("Default header:"),
+                headerText,
+                differentFirstPage,
+                firstPageLabel,
+                firstPageText);
+
+        dialog.getDialogPane().setContent(content);
+        dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
+
+        dialog.setResultConverter(button -> {
+            if (button == ButtonType.OK) {
+                headerFooterManager.setHeaderContent(headerText.getText(), false);
+                if (differentFirstPage.isSelected()) {
+                    headerFooterManager.setHeaderContent(firstPageText.getText(), true);
+                    headerFooterManager.setDifferentFirstPage(true);
+                } else {
+                    headerFooterManager.setDifferentFirstPage(false);
+                }
+                updateAllPageHeadersFooters();
+                return headerText.getText();
+            }
+            return null;
+        });
+
+        dialog.showAndWait();
+    }
+
+    private void showFooterDialog(Stage stage) {
+        Dialog<String> dialog = new Dialog<>();
+        dialog.setTitle("Edit Footer");
+        dialog.setHeaderText("Enter footer content:");
+
+        VBox content = new VBox(10);
+        content.setPadding(new Insets(10));
+
+        TextArea footerText = new TextArea();
+        footerText.setPrefRowCount(3);
+        footerText.setPromptText("Type your footer text here...");
+
+        CheckBox differentFirstPage = new CheckBox("Different first page");
+        differentFirstPage.setSelected(headerFooterManager.isDifferentFirstPage());
+
+        Label firstPageLabel = new Label("First page footer:");
+        firstPageLabel.setVisible(differentFirstPage.isSelected());
+        TextArea firstPageText = new TextArea();
+        firstPageText.setPrefRowCount(2);
+        firstPageText.setVisible(differentFirstPage.isSelected());
+
+        differentFirstPage.setOnAction(e -> {
+            boolean selected = differentFirstPage.isSelected();
+            firstPageLabel.setVisible(selected);
+            firstPageText.setVisible(selected);
+        });
+
+        // Load existing content
+        footerText.setText(headerFooterManager.getDefaultFooterContent());
+        firstPageText.setText(headerFooterManager.getFirstPageFooterContent());
+
+        content.getChildren().addAll(
+                new Label("Default footer:"),
+                footerText,
+                differentFirstPage,
+                firstPageLabel,
+                firstPageText);
+
+        dialog.getDialogPane().setContent(content);
+        dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
+
+        dialog.setResultConverter(button -> {
+            if (button == ButtonType.OK) {
+                headerFooterManager.setFooterContent(footerText.getText(), false);
+                if (differentFirstPage.isSelected()) {
+                    headerFooterManager.setFooterContent(firstPageText.getText(), true);
+                    headerFooterManager.setDifferentFirstPage(true);
+                } else {
+                    headerFooterManager.setDifferentFirstPage(false);
+                }
+                updateAllPageHeadersFooters();
+                return footerText.getText();
+            }
+            return null;
+        });
+
+        dialog.showAndWait();
+    }
+
+    private void showPageNumberDialog(Stage stage) {
+        Dialog<Void> dialog = new Dialog<>();
+        dialog.setTitle("Page Numbers");
+        dialog.setHeaderText("Configure page numbering:");
+
+        VBox content = new VBox(15);
+        content.setPadding(new Insets(10));
+
+        CheckBox enablePageNumbers = new CheckBox("Show page numbers");
+        enablePageNumbers.setSelected(headerFooterManager.isShowPageNumbers());
+
+        // Format selection
+        Label formatLabel = new Label("Number format:");
+        ComboBox<HeaderFooterManager.PageNumberFormat> formatCombo = new ComboBox<>();
+        formatCombo.getItems().addAll(HeaderFooterManager.PageNumberFormat.values());
+        formatCombo.setValue(headerFooterManager.getPageNumberFormat());
+        formatCombo.setDisable(!enablePageNumbers.isSelected());
+
+        // Position selection
+        Label positionLabel = new Label("Position:");
+        ComboBox<HeaderFooterManager.PageNumberPosition> positionCombo = new ComboBox<>();
+        positionCombo.getItems().addAll(HeaderFooterManager.PageNumberPosition.values());
+        positionCombo.setValue(headerFooterManager.getPageNumberPosition());
+        positionCombo.setDisable(!enablePageNumbers.isSelected());
+
+        enablePageNumbers.setOnAction(e -> {
+            boolean enabled = enablePageNumbers.isSelected();
+            formatCombo.setDisable(!enabled);
+            positionCombo.setDisable(!enabled);
+        });
+
+        content.getChildren().addAll(
+                enablePageNumbers,
+                formatLabel,
+                formatCombo,
+                positionLabel,
+                positionCombo);
+
+        dialog.getDialogPane().setContent(content);
+        dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
+
+        dialog.setResultConverter(button -> {
+            if (button == ButtonType.OK) {
+                headerFooterManager.setShowPageNumbers(enablePageNumbers.isSelected());
+                headerFooterManager.setPageNumberFormat(formatCombo.getValue());
+                headerFooterManager.setPageNumberPosition(positionCombo.getValue());
+                updateAllPageHeadersFooters();
+            }
+            return null;
+        });
+
+        dialog.showAndWait();
+    }
+
+    private void updateAllPageHeadersFooters() {
+        for (int i = 0; i < headerEditors.size(); i++) {
+            int pageNumber = i + 1;
+
+            // Update header
+            CustomEditor headerEditor = headerEditors.get(i);
+            String headerContent = headerFooterManager.getCompleteHeaderForPage(pageNumber);
+            headerEditor.clear();
+            headerEditor.replaceText(0, 0, headerContent);
+
+            // Update footer
+            CustomEditor footerEditor = footerEditors.get(i);
+            String footerContent = headerFooterManager.getCompleteFooterForPage(pageNumber);
+            footerEditor.clear();
+            footerEditor.replaceText(0, 0, footerContent);
+        }
     }
 
     public static void main(String[] args) {

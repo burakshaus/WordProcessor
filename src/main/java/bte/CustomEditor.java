@@ -88,10 +88,25 @@ public class CustomEditor extends GenericStyledArea<String, Either<String, Node>
         this.replace(pos, pos, Either.<String, Node>right(table), "");
     }
 
-
     public void replaceText(int start, int end, String text, String style) {
         replaceText(start, end, text);
         setStyle(start, start + text.length(), style);
+    }
+
+    /**
+     * Creates a specialized CustomEditor for header/footer areas.
+     * These editors have constrained height and special styling.
+     */
+    public static CustomEditor createHeaderFooterEditor(boolean isEditable) {
+        CustomEditor editor = new CustomEditor();
+        editor.setMaxHeight(40);
+        editor.setMinHeight(40);
+        editor.setPrefHeight(40);
+        editor.setStyle(
+                "-fx-font-size: 10px; -fx-border-color: #E0E0E0; -fx-border-width: 0 0 1 0; -fx-background-color: #FAFAFA;");
+        editor.setEditable(isEditable);
+        editor.setWrapText(true);
+        return editor;
     }
 
 }
