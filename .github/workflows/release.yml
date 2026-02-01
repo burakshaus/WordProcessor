@@ -50,8 +50,8 @@ jobs:
         echo "Building installer for version: $VERSION"
         
         # JPackage Komutu
-        # Not: İkon eklemek istersen '--icon' satırını yorumdan çıkarman gerekir.
-        # Şu an hata vermemesi için ikonsuz standart kurulum yapıyoruz.
+        # JavaFX modüllerini dahil etmek için --add-modules kullanıyoruz
+        # Not: --enable-preview bazen jpackage ile uyumsuz olabilir, kaldırıldı.
         
         jpackage \
           --input target/ \
@@ -63,7 +63,7 @@ jobs:
           --copyright "Copyright 2026 Burak" \
           --type ${{ matrix.type }} \
           --dest output/ \
-          --java-options '--enable-preview'
+          --java-options '-Dfile.encoding=UTF-8'
 
     # 3. Adım: Oluşan Dosyaları Release Sayfasına Yükle
     - name: Upload Installer to Release

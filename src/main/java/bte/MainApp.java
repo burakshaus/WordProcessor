@@ -68,6 +68,8 @@ public class MainApp extends Application {
     private ColorPicker highlightPicker;
     private Button insertImageBtn;
     private Button insertTableBtn;
+    private ToggleButton bulletListBtn;
+    private ToggleButton numberedListBtn;
 
     // Microsoft Word Standard Color Palette (4 rows x 5 colors = 20 total)
     // Row 1: Theme Colors - Dark variants
@@ -523,6 +525,20 @@ public class MainApp extends Application {
         alignJustifyBtn.setTooltip(new Tooltip("Align Justify"));
         alignJustifyBtn.setOnAction(e -> applyAlignment("JUSTIFY"));
 
+        // Bullet list button
+        bulletListBtn = new ToggleButton();
+        bulletListBtn.setGraphic(createIcon(
+                "M4 10.5c-.83 0-1.5.67-1.5 1.5s.67 1.5 1.5 1.5 1.5-.67 1.5-1.5-.67-1.5-1.5-1.5zm0-6c-.83 0-1.5.67-1.5 1.5S3.17 7.5 4 7.5 5.5 6.83 5.5 6 4.83 4.5 4 4.5zm0 12c-.83 0-1.5.68-1.5 1.5s.68 1.5 1.5 1.5 1.5-.68 1.5-1.5-.67-1.5-1.5-1.5zM7 19h14v-2H7v2zm0-6h14v-2H7v2zm0-8v2h14V5H7z"));
+        bulletListBtn.setTooltip(new Tooltip("Bullet List"));
+        bulletListBtn.setOnAction(e -> toggleBulletList());
+
+        // Numbered list button
+        numberedListBtn = new ToggleButton();
+        numberedListBtn.setGraphic(createIcon(
+                "M2 17h2v.5H3v1h1v.5H2v1h3v-4H2v1zm1-9h1V4H2v1h1v3zm-1 3h1.8L2 13.1v.9h3v-1H3.2L5 10.9V10H2v1zm5-6v2h14V5H7zm0 14h14v-2H7v2zm0-6h14v-2H7v2z"));
+        numberedListBtn.setTooltip(new Tooltip("Numbered List"));
+        numberedListBtn.setOnAction(e -> toggleNumberedList());
+
         // Image button
         insertImageBtn = new Button();
         insertImageBtn.setGraphic(createIcon(
@@ -619,7 +635,9 @@ public class MainApp extends Application {
                 new Separator(),
                 insertImageBtn, insertTableBtn,
                 new Separator(),
-                alignLeftBtn, alignCenterBtn, alignRightBtn, alignJustifyBtn
+                alignLeftBtn, alignCenterBtn, alignRightBtn, alignJustifyBtn,
+                new Separator(),
+                bulletListBtn, numberedListBtn
 
         );
         return toolBar;
@@ -988,6 +1006,70 @@ public class MainApp extends Application {
 
         // Apply paragraph style to current paragraph
         getCurrentEditor().setParagraphStyle(currentParagraph, alignStyle);
+    }
+
+    private void toggleBulletList() {
+        CustomEditor editor = getCurrentEditor();
+        int currentParagraph = editor.getCurrentParagraph();
+
+        // Get current paragraph text
+        int paraStart = editor.getAbsolutePosition(currentParagraph, 0);
+        int paraEnd = paraStart + editor.getParagraphLength(currentParagraph);
+        String currentText = editor.getText(paraStart, paraEnd).trim();
+
+        // Check if already a bullet list
+        if (currentText.startsWith("• ")) {
+            // Remove bullet
+            String newText = currentText.substring(2);
+            editor.replaceText(paraStart, paraEnd, newText + "\n");
+            editor.setParagraphStyle(currentParagraph, "");
+            bulletListBtn.setSelected(false);
+        } else {
+            // Remove numbered list if present
+            if (currentText.matches("^\\d+\\.\\s.*")) {
+                currentText = currentText.replaceFirst("^\\d+\\.\\s+", "");
+                numberedListBtn.setSelected(false);
+            }
+            // Add bullet
+            String newText = "• " + currentText;
+            editor.replaceText(paraStart, paraEnd, newText + "\n");
+            editor.setParagraphStyle(currentParagraph, "-fx-padding: 0 0 0 20;");
+            bulletListBtn.setSelected(true);
+        }
+
+        editor.requestFocus();
+    }
+
+    private void toggleNumberedList() {
+        CustomEditor editor = getCurrentEditor();
+        int currentParagraph = editor.getCurrentParagraph();
+
+        // Get current paragraph text
+        int paraStart = editor.getAbsolutePosition(currentParagraph, 0);
+        int paraEnd = paraStart + editor.getParagraphLength(currentParagraph);
+        String currentText = editor.getText(paraStart, paraEnd).trim();
+
+        // Check if already a numbered list
+        if (currentText.matches("^\\d+\\.\\s.*")) {
+            // Remove numbering
+            String newText = currentText.replaceFirst("^\\d+\\.\\s+", "");
+            editor.replaceText(paraStart, paraEnd, newText + "\n");
+            editor.setParagraphStyle(currentParagraph, "");
+            numberedListBtn.setSelected(false);
+        } else {
+            // Remove bullet list if present
+            if (currentText.startsWith("• ")) {
+                currentText = currentText.substring(2);
+                bulletListBtn.setSelected(false);
+            }
+            // Add numbering (simplified - all items use "1.")
+            String newText = "1. " + currentText;
+            editor.replaceText(paraStart, paraEnd, newText + "\n");
+            editor.setParagraphStyle(currentParagraph, "-fx-padding: 0 0 0 20;");
+            numberedListBtn.setSelected(true);
+        }
+
+        editor.requestFocus();
     }
 
     private HBox createStatusBar() {

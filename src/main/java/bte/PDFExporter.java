@@ -1,8 +1,8 @@
 package bte;
 
-import com.lowagie.text.*;
-import com.lowagie.text.Font;
-import com.lowagie.text.pdf.PdfWriter;
+import org.openpdf.text.*;
+import org.openpdf.text.Font;
+import org.openpdf.text.pdf.PdfWriter;
 import org.fxmisc.richtext.model.Paragraph;
 import org.fxmisc.richtext.model.StyledSegment;
 import org.reactfx.util.Either;
@@ -22,7 +22,7 @@ public class PDFExporter {
         document.open();
 
         for (Paragraph<String, Either<String, Node>, String> p : editor.getParagraphs()) {
-            com.lowagie.text.Paragraph pdfParagraph = new com.lowagie.text.Paragraph();
+            org.openpdf.text.Paragraph pdfParagraph = new org.openpdf.text.Paragraph();
 
             // Handle Paragraph Alignment
             String pStyle = p.getParagraphStyle();

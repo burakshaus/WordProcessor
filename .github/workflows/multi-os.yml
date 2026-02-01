@@ -24,6 +24,6 @@ jobs:
         cache: maven
 
     - name: Build with Maven
+      # Skip tests: JavaFX GUI tests fail in headless CI across all platforms
       # Linux/Mac ve Windows arasındaki komut farkını yönetmek gerekmez, mvn heryerde aynıdır.
-      # Ancak Windows bazen karakter kodlamasında sorun çıkarabilir, bu iyi bir testtir.
       run: mvn -B package --file pom.xml -DskipTests
