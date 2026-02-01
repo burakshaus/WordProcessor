@@ -994,7 +994,7 @@ public class MainApp extends Application {
         // Highlight
         Color highlight = highlightPicker.getValue();
         if (highlight != null && !highlight.equals(Color.TRANSPARENT)) {
-            style.append("-fx-background-color: ").append(toHexString(highlight)).append("; ");
+            style.append("-rtfx-background-color: ").append(toRgbString(highlight)).append("; ");
         }
 
         return style.toString();
