@@ -67,14 +67,59 @@ public class MainApp extends Application {
     private Button insertImageBtn;
     private Button insertTableBtn;
 
-    private final Color[] WORD_COLORS = {
-            Color.web("#000000"), Color.web("#44546A"), Color.web("#5B9BD5"), Color.web("#ED7D31"),
-            Color.web("#A5A5A5"),
-            Color.web("#FFC000"), Color.web("#4472C4"), Color.web("#70AD47"), Color.web("#FF0000"),
-            Color.web("#7030A0"),
-            Color.web("#F2F2F2"), Color.web("#D6DCE4"), Color.web("#DDEBF7"), Color.web("#FBE5D6"),
-            Color.web("#E7E6E6"),
-            Color.web("#FFF2CC"), Color.web("#D9E1F2"), Color.web("#E2EFDA"), Color.web("#FFCCCC"), Color.web("#EAD1DC")
+    // Microsoft Word Standard Color Palette (4 rows x 5 colors = 20 total)
+    // Row 1: Theme Colors - Dark variants
+    private final Color[] WORD_TEXT_COLORS = {
+            Color.web("#C00000"), // Dark Red
+            Color.web("#FF0000"), // Red
+            Color.web("#FFC000"), // Orange
+            Color.web("#FFFF00"), // Yellow
+            Color.web("#92D050"), // Light Green
+
+            // Row 2: Theme Colors - Standard
+            Color.web("#00B050"), // Green
+            Color.web("#00B0F0"), // Light Blue
+            Color.web("#0070C0"), // Blue
+            Color.web("#002060"), // Dark Blue
+            Color.web("#7030A0"), // Purple
+
+            // Row 3: Basic Colors
+            Color.web("#000000"), // Black
+            Color.web("#FFFFFF"), // White
+            Color.web("#FF0000"), // Red
+            Color.web("#FFC000"), // Orange
+            Color.web("#FFFF00"), // Yellow
+
+            // Row 4: More variants
+            Color.web("#00FF00"), // Bright Green
+            Color.web("#00FFFF"), // Cyan
+            Color.web("#0000FF"), // Blue
+            Color.web("#FF00FF"), // Magenta
+            Color.web("#800080") // Purple
+    };
+
+    // Microsoft Word Highlight Color Palette (3 rows x 5 colors = 15 total)
+    private final Color[] WORD_HIGHLIGHT_COLORS = {
+            // Row 1: Bright highlights
+            Color.web("#FFFF00"), // Yellow (most common highlight)
+            Color.web("#00FF00"), // Bright Green
+            Color.web("#00FFFF"), // Cyan
+            Color.web("#FF00FF"), // Magenta
+            Color.web("#0000FF"), // Blue
+
+            // Row 2: Standard highlights
+            Color.web("#FF0000"), // Red
+            Color.web("#00008B"), // Dark Blue
+            Color.web("#008080"), // Teal
+            Color.web("#008000"), // Green
+            Color.web("#800080"), // Violet
+
+            // Row 3: Dark highlights
+            Color.web("#800000"), // Dark Red
+            Color.web("#808000"), // Dark Yellow
+            Color.web("#808080"), // Dark Gray
+            Color.web("#C0C0C0"), // Light Gray
+            Color.web("#000000") // Black
     };
 
     private String currentTypingStyle = "";
@@ -588,9 +633,13 @@ public class MainApp extends Application {
         colorGrid.setHgap(3);
         colorGrid.setVgap(3);
 
+        // Doğru renk paletini seç (Text için WORD_TEXT_COLORS, Highlight için
+        // WORD_HIGHLIGHT_COLORS)
+        Color[] colorPalette = isHighlight ? WORD_HIGHLIGHT_COLORS : WORD_TEXT_COLORS;
+
         int col = 0;
         int row = 0;
-        for (Color color : WORD_COLORS) {
+        for (Color color : colorPalette) {
             // Renk Kutusu
             Button colorBox = new Button();
             colorBox.setPrefSize(20, 20);
