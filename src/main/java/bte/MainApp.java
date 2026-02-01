@@ -25,6 +25,8 @@ import org.reactfx.util.Either;
 
 import javafx.print.PrinterJob;
 import javafx.scene.effect.DropShadow;
+import javafx.scene.image.Image;
+import javafx.scene.image.ImageView;
 import javafx.scene.shape.SVGPath;
 
 import java.io.*;
@@ -555,6 +557,51 @@ public class MainApp extends Application {
             }
         });
 
+        Button growBtn = new Button();
+        Button shrinkBtn = new Button();
+        try {
+            shrinkBtn.setGraphic(createImageView("/icons/shrink.png", 20));
+            shrinkBtn.setTooltip(new Tooltip("Yazı Boyutunu Küçült"));
+            shrinkBtn.setOnAction(e -> {
+                Integer currentSize = fontSizeCombo.getValue();
+                if (currentSize != null && currentSize > 8) {
+                    fontSizeCombo.setValue(currentSize - 2);
+                    applyStyle();
+                }
+            });
+
+            growBtn.setGraphic(createImageView("/icons/grow.png", 20));
+            growBtn.setTooltip(new Tooltip("Yazı Boyutunu Büyüt"));
+            growBtn.setOnAction(e -> {
+                Integer currentSize = fontSizeCombo.getValue();
+                if (currentSize != null && currentSize < 72) {
+                    fontSizeCombo.setValue(currentSize + 2);
+                    applyStyle();
+                }
+            });
+
+        } catch (Exception e) {
+            growBtn.setText("A+");
+            growBtn.setTooltip(new Tooltip("Yazı Boyutunu Büyüt"));
+            growBtn.setOnAction(ev -> {
+                Integer currentSize = fontSizeCombo.getValue();
+                if (currentSize != null && currentSize < 72) {
+                    fontSizeCombo.setValue(currentSize + 2);
+                    applyStyle();
+                }
+            });
+
+            shrinkBtn.setText("A-");
+            shrinkBtn.setTooltip(new Tooltip("Yazı Boyutunu Küçült"));
+            shrinkBtn.setOnAction(ev -> {
+                Integer currentSize = fontSizeCombo.getValue();
+                if (currentSize != null && currentSize > 8) {
+                    fontSizeCombo.setValue(currentSize - 2);
+                    applyStyle();
+                }
+            });
+        }
+
         toolBar.getItems().addAll(
                 themeToggle, // <--- BAK BURAYA, EN BAŞA KOYDUK
                 new Separator(), // Araya şık bir çizgi çektik
@@ -565,6 +612,8 @@ public class MainApp extends Application {
                 superBtn, subBtn,
                 new Separator(),
                 fontFamilyCombo, fontSizeCombo,
+                new Separator(),
+                growBtn, shrinkBtn,
                 new Separator(),
                 wordColorBtn, wordHighlightBtn,
                 new Separator(),
@@ -1061,6 +1110,15 @@ public class MainApp extends Application {
                 (int) (color.getRed() * 255),
                 (int) (color.getGreen() * 255),
                 (int) (color.getBlue() * 255));
+    }
+
+    private ImageView createImageView(String path, double size) {
+        Image image = new Image(getClass().getResourceAsStream(path));
+        ImageView imageView = new ImageView(image);
+        imageView.setFitWidth(size);
+        imageView.setFitHeight(size);
+        imageView.setPreserveRatio(true);
+        return imageView;
     }
 
     private void updateWordCount() {
