@@ -12,6 +12,7 @@ import javafx.scene.control.*;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyCodeCombination;
 import javafx.scene.input.KeyCombination;
+import javafx.scene.input.KeyEvent;
 import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
 import javafx.stage.FileChooser;
@@ -203,6 +204,34 @@ public class MainApp extends Application {
             javafx.application.Platform.runLater(() -> {
                 targetEditor.requestFollowCaret();
             });
+        });
+
+        targetEditor.addEventFilter(KeyEvent.KEY_TYPED, e -> {
+            String character = e.getCharacter();
+
+            if (!character.isEmpty() && Character.isLetter(character.charAt(0))
+                    && character.equals(character.toLowerCase())) {
+                IndexRange selection = targetEditor.getSelection();
+                int checkPos = selection.getStart();
+                boolean shouldCapitilazize = false;
+                if (checkPos == 0) {
+                    shouldCapitilazize = true;
+                } else {
+                    String prevChar = targetEditor.getText(checkPos - 1, checkPos);
+                    if (prevChar.equals("\n")) {
+                        shouldCapitilazize = true;
+                    } else if (checkPos >= 2 && prevChar.equals(" ")) {
+                        String charBeforeSpace = targetEditor.getText(checkPos - 2, checkPos - 1);
+                        if (charBeforeSpace.equals(".") || charBeforeSpace.equals("?") || charBeforeSpace.equals("!")) {
+                            shouldCapitilazize = true;
+                        }
+                    }
+                }
+                if (shouldCapitilazize) {
+                    e.consume();
+                    targetEditor.replaceSelection(character.toUpperCase());
+                }
+            }
         });
 
         targetEditor.multiPlainChanges().subscribe(changes -> {
