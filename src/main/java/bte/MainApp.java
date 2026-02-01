@@ -206,6 +206,58 @@ public class MainApp extends Application {
             });
         });
 
+        // Handle Enter key for automatic bullet/numbered list continuation
+        targetEditor.addEventFilter(KeyEvent.KEY_PRESSED, e -> {
+            if (e.getCode() == KeyCode.ENTER) {
+                int currentParagraph = targetEditor.getCurrentParagraph();
+                int paraStart = targetEditor.getAbsolutePosition(currentParagraph, 0);
+                int paraEnd = paraStart + targetEditor.getParagraphLength(currentParagraph);
+                String currentText = targetEditor.getText(paraStart, paraEnd).trim();
+
+                // Check if current line is a bullet list
+                if (currentText.startsWith("• ")) {
+                    e.consume();
+                    // If the bullet is empty (just "• "), remove it and exit list mode
+                    if (currentText.equals("•") || currentText.equals("• ")) {
+                        targetEditor.replaceText(paraStart, paraEnd, "");
+                        bulletListBtn.setSelected(false);
+                        targetEditor.setParagraphStyle(currentParagraph, "");
+                    } else {
+                        // Add new line with bullet
+                        targetEditor.insertText(targetEditor.getCaretPosition(), "\n• ");
+                        // Apply padding to the new paragraph
+                        javafx.application.Platform.runLater(() -> {
+                            int newParagraph = targetEditor.getCurrentParagraph();
+                            targetEditor.setParagraphStyle(newParagraph, "-fx-padding: 0 0 0 20;");
+                        });
+                    }
+                }
+                // Check if current line is a numbered list
+                else if (currentText.matches("^\\d+\\.\\s.*")) {
+                    e.consume();
+                    // Extract the number
+                    String numPart = currentText.split("\\.")[0];
+                    int currentNum = Integer.parseInt(numPart);
+
+                    // If the numbered item is empty (just "1. "), remove it and exit list mode
+                    if (currentText.matches("^\\d+\\.\\s*$")) {
+                        targetEditor.replaceText(paraStart, paraEnd, "");
+                        numberedListBtn.setSelected(false);
+                        targetEditor.setParagraphStyle(currentParagraph, "");
+                    } else {
+                        // Add new line with incremented number
+                        int nextNum = currentNum + 1;
+                        targetEditor.insertText(targetEditor.getCaretPosition(), "\n" + nextNum + ". ");
+                        // Apply padding to the new paragraph
+                        javafx.application.Platform.runLater(() -> {
+                            int newParagraph = targetEditor.getCurrentParagraph();
+                            targetEditor.setParagraphStyle(newParagraph, "-fx-padding: 0 0 0 20;");
+                        });
+                    }
+                }
+            }
+        });
+
         targetEditor.addEventFilter(KeyEvent.KEY_TYPED, e -> {
             String character = e.getCharacter();
 
@@ -222,8 +274,20 @@ public class MainApp extends Application {
                         shouldCapitilazize = true;
                     } else if (checkPos >= 2 && prevChar.equals(" ")) {
                         String charBeforeSpace = targetEditor.getText(checkPos - 2, checkPos - 1);
+                        // Check for sentence ending punctuation
                         if (charBeforeSpace.equals(".") || charBeforeSpace.equals("?") || charBeforeSpace.equals("!")) {
                             shouldCapitilazize = true;
+                        }
+                        // Check for bullet list marker (• )
+                        else if (charBeforeSpace.equals("•")) {
+                            shouldCapitilazize = true;
+                        }
+                        // Check for numbered list marker (e.g., "1. ", "2. ", etc.)
+                        else if (checkPos >= 3 && charBeforeSpace.equals(".")) {
+                            String charBeforeDot = targetEditor.getText(checkPos - 3, checkPos - 2);
+                            if (Character.isDigit(charBeforeDot.charAt(0))) {
+                                shouldCapitilazize = true;
+                            }
                         }
                     }
                 }
@@ -1449,7 +1513,8 @@ public class MainApp extends Application {
         File file = chooser.showSaveDialog(stage);
         if (file != null) {
             try {
-                PDFExporter.export(getCurrentEditor(), file);
+                // Export all pages instead of just the current one
+                PDFExporter.export(editors, file);
                 Alert alert = new Alert(Alert.AlertType.INFORMATION);
                 alert.setTitle("Export Successful");
                 alert.setHeaderText(null);

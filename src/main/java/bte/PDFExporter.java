@@ -11,16 +11,53 @@ import javafx.scene.Node;
 import java.awt.Color;
 import java.io.File;
 import java.io.FileOutputStream;
+import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class PDFExporter {
 
+    /**
+     * Export all editors (pages) to PDF
+     */
+    public static void export(List<CustomEditor> editors, File file) throws Exception {
+        Document document = new Document(PageSize.A4);
+        PdfWriter.getInstance(document, new FileOutputStream(file));
+        document.open();
+
+        for (int i = 0; i < editors.size(); i++) {
+            CustomEditor editor = editors.get(i);
+
+            // Add content from each editor
+            exportEditorContent(editor, document);
+
+            // Add page break between pages (except after the last page)
+            if (i < editors.size() - 1) {
+                document.newPage();
+            }
+        }
+
+        document.close();
+    }
+
+    /**
+     * Export a single editor to PDF (backward compatibility)
+     */
     public static void export(CustomEditor editor, File file) throws Exception {
         Document document = new Document(PageSize.A4);
         PdfWriter.getInstance(document, new FileOutputStream(file));
         document.open();
 
+        exportEditorContent(editor, document);
+
+        document.close();
+    }
+
+    /**
+     * Helper method to export content from a single editor to an existing PDF
+     * document
+     */
+    private static void exportEditorContent(CustomEditor editor, Document document) throws Exception {
         for (Paragraph<String, Either<String, Node>, String> p : editor.getParagraphs()) {
             org.openpdf.text.Paragraph pdfParagraph = new org.openpdf.text.Paragraph();
 
@@ -60,8 +97,6 @@ public class PDFExporter {
             }
             document.add(pdfParagraph);
         }
-
-        document.close();
     }
 
     private static Font parseFont(String style) {
