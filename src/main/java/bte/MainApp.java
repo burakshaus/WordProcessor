@@ -4,7 +4,9 @@ import javafx.application.Application;
 
 import javafx.collections.FXCollections;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
@@ -18,9 +20,12 @@ import javafx.scene.paint.Color;
 import javafx.stage.FileChooser;
 import javafx.stage.Stage;
 
+import org.apache.poi.xwpf.usermodel.ParagraphAlignment;
 import org.apache.poi.xwpf.usermodel.XWPFDocument;
 import org.apache.poi.xwpf.usermodel.XWPFParagraph;
 import org.apache.poi.xwpf.usermodel.XWPFRun;
+import org.apache.poi.xwpf.usermodel.UnderlinePatterns;
+import org.apache.poi.xwpf.usermodel.Borders;
 
 import org.reactfx.util.Either;
 
@@ -72,6 +77,10 @@ public class MainApp extends Application {
     private Button insertHyperlinkBtn;
     private ToggleButton bulletListBtn;
     private ToggleButton numberedListBtn;
+    private ComboBox<String> lineSpacingCombo;
+    private Button increaseIndentBtn;
+    private Button decreaseIndentBtn;
+    private MenuButton paragraphSpacingBtn;
 
     // Microsoft Word Standard Color Palette (4 rows x 5 colors = 20 total)
     // Row 1: Theme Colors - Dark variants
@@ -125,8 +134,26 @@ public class MainApp extends Application {
             Color.web("#808000"), // Dark Yellow
             Color.web("#808080"), // Dark Gray
             Color.web("#C0C0C0"), // Light Gray
-            Color.web("#000000") // Black
+            Color.web("#5B9BD5") // Blue
     };
+
+    // List state tracking for multi-level bullets and numbering
+    private Map<Integer, ListInfo> listState = new HashMap<>();
+
+    // Inner class to track list information per paragraph
+    static class ListInfo {
+        boolean isList;
+        boolean isBullet; // true = bullet, false = number
+        int level; // 0-3 for different styles
+        int numberIndex; // sequential number for numbered lists
+
+        ListInfo(boolean isBullet, int level, int numberIndex) {
+            this.isList = true;
+            this.isBullet = isBullet;
+            this.level = level;
+            this.numberIndex = numberIndex;
+        }
+    }
 
     private String currentTypingStyle = "";
 
@@ -205,6 +232,21 @@ public class MainApp extends Application {
             javafx.application.Platform.runLater(() -> {
                 targetEditor.requestFollowCaret();
             });
+        });
+
+        // Handle Tab/Shift+Tab for list level changes
+        targetEditor.addEventFilter(KeyEvent.KEY_PRESSED, e -> {
+            if (e.getCode() == KeyCode.TAB) {
+                int currentParagraph = targetEditor.getCurrentParagraph();
+                if (isInList(currentParagraph)) {
+                    e.consume();
+                    if (e.isShiftDown()) {
+                        decreaseListLevel();
+                    } else {
+                        increaseListLevel();
+                    }
+                }
+            }
         });
 
         // Handle Enter key for automatic bullet/numbered list continuation
@@ -304,6 +346,23 @@ public class MainApp extends Application {
                 if (!change.getInserted().isEmpty()) {
                     int pos = change.getPosition();
                     int length = change.getInserted().length();
+                    String inserted = change.getInserted();
+
+                    // Convert to Unicode super/subscript if those modes are active
+                    if (superBtn.isSelected()) {
+                        String converted = UnicodeConverter.toSuperscript(inserted);
+                        if (!converted.equals(inserted)) {
+                            targetEditor.replaceText(pos, pos + length, converted);
+                            length = converted.length();
+                        }
+                    } else if (subBtn.isSelected()) {
+                        String converted = UnicodeConverter.toSubscript(inserted);
+                        if (!converted.equals(inserted)) {
+                            targetEditor.replaceText(pos, pos + length, converted);
+                            length = converted.length();
+                        }
+                    }
+
                     targetEditor.setStyle(pos, pos + length, currentTypingStyle);
                 }
             }
@@ -741,10 +800,216 @@ public class MainApp extends Application {
                 new Separator(),
                 alignLeftBtn, alignCenterBtn, alignRightBtn, alignJustifyBtn,
                 new Separator(),
+                createLineSpacingCombo(),
+                new Separator(),
+                createParagraphSpacingMenu(),
+                new Separator(),
+                createIndentButtons(),
+                new Separator(),
                 bulletListBtn, numberedListBtn
 
         );
         return toolBar;
+    }
+
+    private ComboBox<String> createLineSpacingCombo() {
+        lineSpacingCombo = new ComboBox<>();
+        lineSpacingCombo.getItems().addAll("1.0", "1.15", "1.5", "2.0", "2.5", "3.0");
+        lineSpacingCombo.setValue("1.15");
+        lineSpacingCombo.setTooltip(new Tooltip("Line Spacing"));
+        lineSpacingCombo.setPrefWidth(80);
+        lineSpacingCombo.setOnAction(e -> applyLineSpacing());
+        return lineSpacingCombo;
+    }
+
+    private void applyLineSpacing() {
+        String spacing = lineSpacingCombo.getValue();
+        if (spacing == null)
+            return;
+
+        double spacingValue = Double.parseDouble(spacing);
+        double lineSpacing = (spacingValue - 1.0) * 1.2; // Convert to em units
+
+        int currentParagraph = getCurrentEditor().getCurrentParagraph();
+        String style = String.format("-fx-line-spacing: %.2fem;", lineSpacing);
+
+        getCurrentEditor().setParagraphStyle(currentParagraph, style);
+        getCurrentEditor().requestFocus();
+    }
+
+    private MenuButton createParagraphSpacingMenu() {
+        paragraphSpacingBtn = new MenuButton("¶");
+        paragraphSpacingBtn.setTooltip(new Tooltip("Paragraph Spacing"));
+
+        Menu beforeMenu = new Menu("Space Before");
+        MenuItem before0 = new MenuItem("0 pt");
+        MenuItem before6 = new MenuItem("6 pt");
+        MenuItem before12 = new MenuItem("12 pt");
+
+        before0.setOnAction(e -> applyParagraphSpacing(0, null));
+        before6.setOnAction(e -> applyParagraphSpacing(6, null));
+        before12.setOnAction(e -> applyParagraphSpacing(12, null));
+
+        beforeMenu.getItems().addAll(before0, before6, before12);
+
+        Menu afterMenu = new Menu("Space After");
+        MenuItem after0 = new MenuItem("0 pt");
+        MenuItem after8 = new MenuItem("8 pt");
+        MenuItem after10 = new MenuItem("10 pt");
+
+        after0.setOnAction(e -> applyParagraphSpacing(null, 0));
+        after8.setOnAction(e -> applyParagraphSpacing(null, 8));
+        after10.setOnAction(e -> applyParagraphSpacing(null, 10));
+
+        afterMenu.getItems().addAll(after0, after8, after10);
+
+        paragraphSpacingBtn.getItems().addAll(beforeMenu, afterMenu);
+        return paragraphSpacingBtn;
+    }
+
+    private void applyParagraphSpacing(Integer before, Integer after) {
+        int currentParagraph = getCurrentEditor().getCurrentParagraph();
+        String currentStyle = getCurrentEditor().getParagraph(currentParagraph).getParagraphStyle();
+
+        // Extract current padding values
+        int topPadding = (before != null) ? before : extractPaddingValue(currentStyle, "top");
+        int bottomPadding = (after != null) ? after : extractPaddingValue(currentStyle, "bottom");
+        int leftPadding = extractPaddingValue(currentStyle, "left");
+
+        String style = String.format("-fx-padding: %dpx 0 %dpx %dpx;", topPadding, bottomPadding, leftPadding);
+        getCurrentEditor().setParagraphStyle(currentParagraph, style);
+        getCurrentEditor().requestFocus();
+    }
+
+    private int extractPaddingValue(String style, String side) {
+        if (style == null || style.isEmpty())
+            return 0;
+
+        int index = style.indexOf("-fx-padding:");
+        if (index == -1)
+            return 0;
+
+        int start = style.indexOf(":", index) + 1;
+        int end = style.indexOf(";", start);
+        if (end == -1)
+            end = style.length();
+
+        try {
+            String value = style.substring(start, end).trim();
+            String[] parts = value.split("\\s+");
+
+            if (parts.length == 4) {
+                // top right bottom left
+                switch (side) {
+                    case "top":
+                        return Integer.parseInt(parts[0].replace("px", ""));
+                    case "right":
+                        return Integer.parseInt(parts[1].replace("px", ""));
+                    case "bottom":
+                        return Integer.parseInt(parts[2].replace("px", ""));
+                    case "left":
+                        return Integer.parseInt(parts[3].replace("px", ""));
+                }
+            }
+        } catch (Exception e) {
+            // Ignore parsing errors
+        }
+
+        return 0;
+    }
+
+    private HBox createIndentButtons() {
+        HBox indentBox = new HBox(5);
+
+        // Increase indent button
+        increaseIndentBtn = new Button();
+        increaseIndentBtn.setGraphic(createIcon(
+                "M11 7h6v2h-6V7zm0 4h6v2h-6v-2zm0 4h6v2h-6v-2zM7 7v10l4-5-4-5z"));
+        increaseIndentBtn.setTooltip(new Tooltip("Increase Indent"));
+        increaseIndentBtn.setOnAction(e -> increaseIndent());
+
+        // Decrease indent button
+        decreaseIndentBtn = new Button();
+        decreaseIndentBtn.setGraphic(createIcon(
+                "M11 7h6v2h-6V7zm0 4h6v2h-6v-2zm0 4h6v2h-6v-2zM7 17l-4-5 4-5v10z"));
+        decreaseIndentBtn.setTooltip(new Tooltip("Decrease Indent"));
+        decreaseIndentBtn.setOnAction(e -> decreaseIndent());
+
+        indentBox.getChildren().addAll(decreaseIndentBtn, increaseIndentBtn);
+        return indentBox;
+    }
+
+    private void increaseIndent() {
+        int currentParagraph = getCurrentEditor().getCurrentParagraph();
+
+        // If in a list, use list level logic
+        if (isInList(currentParagraph)) {
+            increaseListLevel();
+            return;
+        }
+
+        // Regular indent for non-list paragraphs
+        String currentStyle = getCurrentEditor().getParagraph(currentParagraph).getParagraphStyle();
+        int currentPadding = extractPadding(currentStyle, "left");
+        int newPadding = currentPadding + 36; // 36px per indent level
+
+        String style = String.format("-fx-padding: 0 0 0 %dpx;", newPadding);
+        getCurrentEditor().setParagraphStyle(currentParagraph, style);
+        getCurrentEditor().requestFocus();
+    }
+
+    private void decreaseIndent() {
+        int currentParagraph = getCurrentEditor().getCurrentParagraph();
+
+        // If in a list, use list level logic
+        if (isInList(currentParagraph)) {
+            decreaseListLevel();
+            return;
+        }
+
+        // Regular outdent for non-list paragraphs
+        String currentStyle = getCurrentEditor().getParagraph(currentParagraph).getParagraphStyle();
+        int currentPadding = extractPadding(currentStyle, "left");
+        int newPadding = Math.max(0, currentPadding - 36); // Can't go below 0
+
+        String style = String.format("-fx-padding: 0 0 0 %dpx;", newPadding);
+        getCurrentEditor().setParagraphStyle(currentParagraph, style);
+        getCurrentEditor().requestFocus();
+    }
+
+    private int extractPadding(String style, String side) {
+        if (style == null || style.isEmpty())
+            return 0;
+
+        // Try to find -fx-padding-left or -fx-padding
+        String pattern = "-fx-padding";
+        if (side.equals("left")) {
+            pattern += "-left";
+        }
+
+        int index = style.indexOf(pattern);
+        if (index == -1)
+            return 0;
+
+        // Extract number
+        int start = style.indexOf(":", index) + 1;
+        int end = style.indexOf("px", start);
+        if (end == -1)
+            return 0;
+
+        try {
+            String value = style.substring(start, end).trim();
+            // If it's -fx-padding (4 values), take the 4th one (left)
+            if (!pattern.contains("-left")) {
+                String[] parts = value.split("\\s+");
+                if (parts.length == 4) {
+                    return Integer.parseInt(parts[3]);
+                }
+            }
+            return Integer.parseInt(value);
+        } catch (Exception e) {
+            return 0;
+        }
     }
 
     private MenuButton createWordColorButton(String iconPath, Color defaultColor, boolean isHighlight) {
@@ -1112,6 +1377,53 @@ public class MainApp extends Application {
         getCurrentEditor().setParagraphStyle(currentParagraph, alignStyle);
     }
 
+    // ===== LIST HELPER METHODS =====
+
+    private String getBulletSymbol(int level) {
+        switch (level % 3) {
+            case 0:
+                return "•"; // Filled circle
+            case 1:
+                return "○"; // Hollow circle
+            case 2:
+                return "■"; // Square
+            default:
+                return "•";
+        }
+    }
+
+    private String getNumberPrefix(int level, int index) {
+        switch (level % 3) {
+            case 0: // Numbers: 1, 2, 3...
+                return index + ".";
+            case 1: // Lowercase letters: a, b, c...
+                return ((char) ('a' + (index - 1))) + ".";
+            case 2: // Roman numerals: i, ii, iii...
+                return toRomanNumeral(index) + ".";
+            default:
+                return index + ".";
+        }
+    }
+
+    private String toRomanNumeral(int number) {
+        if (number >= 10)
+            return String.valueOf(number); // Fallback for large numbers
+        String[] romanNumerals = { "", "i", "ii", "iii", "iv", "v", "vi", "vii", "viii", "ix" };
+        return romanNumerals[number];
+    }
+
+    private int getListLevel(int paragraph) {
+        ListInfo info = listState.get(paragraph);
+        return (info != null) ? info.level : 0;
+    }
+
+    private boolean isInList(int paragraph) {
+        ListInfo info = listState.get(paragraph);
+        return info != null && info.isList;
+    }
+
+    // ===== LIST TOGGLE METHODS =====
+
     private void toggleBulletList() {
         CustomEditor editor = getCurrentEditor();
         int currentParagraph = editor.getCurrentParagraph();
@@ -1121,27 +1433,47 @@ public class MainApp extends Application {
         int paraEnd = paraStart + editor.getParagraphLength(currentParagraph);
         String currentText = editor.getText(paraStart, paraEnd).trim();
 
-        // Check if already a bullet list
-        if (currentText.startsWith("• ")) {
+        // Check if already in a list
+        ListInfo info = listState.get(currentParagraph);
+
+        if (info != null && info.isBullet) {
             // Remove bullet
-            String newText = currentText.substring(2);
-            editor.replaceText(paraStart, paraEnd, newText + "\n");
+            String cleanText = removeListPrefix(currentText);
+            editor.replaceText(paraStart, paraEnd, cleanText + "\n");
             editor.setParagraphStyle(currentParagraph, "");
+            listState.remove(currentParagraph);
             bulletListBtn.setSelected(false);
         } else {
-            // Remove numbered list if present
-            if (currentText.matches("^\\d+\\.\\s.*")) {
-                currentText = currentText.replaceFirst("^\\d+\\.\\s+", "");
+            // Add bullet
+            int level = (info != null) ? info.level : 0;
+            String cleanText = removeListPrefix(currentText);
+            String bullet = getBulletSymbol(level);
+            String newText = bullet + " " + cleanText;
+
+            editor.replaceText(paraStart, paraEnd, newText + "\n");
+            int leftPadding = 20 + (level * 20); // 20px per level
+            editor.setParagraphStyle(currentParagraph, String.format("-fx-padding: 0 0 0 %dpx;", leftPadding));
+
+            listState.put(currentParagraph, new ListInfo(true, level, 1));
+            bulletListBtn.setSelected(true);
+            if (numberedListBtn.isSelected()) {
                 numberedListBtn.setSelected(false);
             }
-            // Add bullet
-            String newText = "• " + currentText;
-            editor.replaceText(paraStart, paraEnd, newText + "\n");
-            editor.setParagraphStyle(currentParagraph, "-fx-padding: 0 0 0 20;");
-            bulletListBtn.setSelected(true);
         }
 
         editor.requestFocus();
+    }
+
+    private String removeListPrefix(String text) {
+        // Remove bullet
+        if (text.startsWith("• ") || text.startsWith("○ ") || text.startsWith("■ ")) {
+            return text.substring(2).trim();
+        }
+        // Remove numbering
+        text = text.replaceFirst("^\\d+\\.\\s+", ""); // Numbers
+        text = text.replaceFirst("^[a-z]\\.\\s+", ""); // Letters
+        text = text.replaceFirst("^[ivx]+\\.\\s+", ""); // Roman numerals
+        return text.trim();
     }
 
     private void toggleNumberedList() {
@@ -1153,25 +1485,156 @@ public class MainApp extends Application {
         int paraEnd = paraStart + editor.getParagraphLength(currentParagraph);
         String currentText = editor.getText(paraStart, paraEnd).trim();
 
-        // Check if already a numbered list
-        if (currentText.matches("^\\d+\\.\\s.*")) {
+        // Check if already in a list
+        ListInfo info = listState.get(currentParagraph);
+
+        if (info != null && !info.isBullet) {
             // Remove numbering
-            String newText = currentText.replaceFirst("^\\d+\\.\\s+", "");
-            editor.replaceText(paraStart, paraEnd, newText + "\n");
+            String cleanText = removeListPrefix(currentText);
+            editor.replaceText(paraStart, paraEnd, cleanText + "\n");
             editor.setParagraphStyle(currentParagraph, "");
+            listState.remove(currentParagraph);
             numberedListBtn.setSelected(false);
         } else {
-            // Remove bullet list if present
-            if (currentText.startsWith("• ")) {
-                currentText = currentText.substring(2);
+            // Add numbering
+            int level = (info != null) ? info.level : 0;
+            String cleanText = removeListPrefix(currentText);
+
+            // Calculate number index (count previous numbered items at same level)
+            int numberIndex = calculateNumberIndex(currentParagraph, level);
+            String numberPrefix = getNumberPrefix(level, numberIndex);
+            String newText = numberPrefix + " " + cleanText;
+
+            editor.replaceText(paraStart, paraEnd, newText + "\n");
+            int leftPadding = 20 + (level * 20); // 20px per level
+            editor.setParagraphStyle(currentParagraph, String.format("-fx-padding: 0 0 0 %dpx;", leftPadding));
+
+            listState.put(currentParagraph, new ListInfo(false, level, numberIndex));
+            numberedListBtn.setSelected(true);
+            if (bulletListBtn.isSelected()) {
                 bulletListBtn.setSelected(false);
             }
-            // Add numbering (simplified - all items use "1.")
-            String newText = "1. " + currentText;
-            editor.replaceText(paraStart, paraEnd, newText + "\n");
-            editor.setParagraphStyle(currentParagraph, "-fx-padding: 0 0 0 20;");
-            numberedListBtn.setSelected(true);
+
+            // Renumber subsequent items
+            renumberFollowingItems(currentParagraph + 1, level, numberIndex);
         }
+
+        editor.requestFocus();
+    }
+
+    private int calculateNumberIndex(int currentParagraph, int level) {
+        int index = 1;
+        // Count backward to find previous numbered items at same level
+        for (int i = currentParagraph - 1; i >= 0; i--) {
+            ListInfo info = listState.get(i);
+            if (info == null || info.isBullet)
+                break; // Stop at non-list or bullet
+            if (info.level == level) {
+                index = info.numberIndex + 1;
+                break;
+            }
+            if (info.level < level)
+                break; // Stop at parent level
+        }
+        return index;
+    }
+
+    private void renumberFollowingItems(int startParagraph, int level, int startIndex) {
+        CustomEditor editor = getCurrentEditor();
+        int totalParagraphs = editor.getParagraphs().size();
+        int currentIndex = startIndex + 1;
+
+        for (int i = startParagraph; i < totalParagraphs; i++) {
+            ListInfo info = listState.get(i);
+            if (info == null || info.isBullet || info.level != level)
+                continue;
+
+            // Update this item's number
+            int paraStart = editor.getAbsolutePosition(i, 0);
+            int paraEnd = paraStart + editor.getParagraphLength(i);
+            String currentText = editor.getText(paraStart, paraEnd).trim();
+            String cleanText = removeListPrefix(currentText);
+            String numberPrefix = getNumberPrefix(level, currentIndex);
+            String newText = numberPrefix + " " + cleanText;
+
+            editor.replaceText(paraStart, paraEnd, newText + "\n");
+            info.numberIndex = currentIndex;
+            currentIndex++;
+        }
+    }
+
+    // ===== LIST LEVEL MANAGEMENT =====
+
+    private void increaseListLevel() {
+        CustomEditor editor = getCurrentEditor();
+        int currentParagraph = editor.getCurrentParagraph();
+        ListInfo info = listState.get(currentParagraph);
+
+        if (info == null || !info.isList)
+            return; // Not in a list
+        if (info.level >= 3)
+            return; // Max level reached
+
+        int newLevel = info.level + 1;
+        info.level = newLevel;
+
+        // Update visual presentation
+        int paraStart = editor.getAbsolutePosition(currentParagraph, 0);
+        int paraEnd = paraStart + editor.getParagraphLength(currentParagraph);
+        String currentText = editor.getText(paraStart, paraEnd).trim();
+        String cleanText = removeListPrefix(currentText);
+
+        String newPrefix;
+        if (info.isBullet) {
+            newPrefix = getBulletSymbol(newLevel);
+        } else {
+            // Reset numbering for new level
+            info.numberIndex = 1;
+            newPrefix = getNumberPrefix(newLevel, 1);
+        }
+
+        String newText = newPrefix + " " + cleanText;
+        editor.replaceText(paraStart, paraEnd, newText + "\n");
+
+        int leftPadding = 20 + (newLevel * 20);
+        editor.setParagraphStyle(currentParagraph, String.format("-fx-padding: 0 0 0 %dpx;", leftPadding));
+
+        editor.requestFocus();
+    }
+
+    private void decreaseListLevel() {
+        CustomEditor editor = getCurrentEditor();
+        int currentParagraph = editor.getCurrentParagraph();
+        ListInfo info = listState.get(currentParagraph);
+
+        if (info == null || !info.isList)
+            return; // Not in a list
+        if (info.level <= 0)
+            return; // Already at level 0
+
+        int newLevel = info.level - 1;
+        info.level = newLevel;
+
+        // Update visual presentation
+        int paraStart = editor.getAbsolutePosition(currentParagraph, 0);
+        int paraEnd = paraStart + editor.getParagraphLength(currentParagraph);
+        String currentText = editor.getText(paraStart, paraEnd).trim();
+        String cleanText = removeListPrefix(currentText);
+
+        String newPrefix;
+        if (info.isBullet) {
+            newPrefix = getBulletSymbol(newLevel);
+        } else {
+            // Recalculate number for this level
+            info.numberIndex = calculateNumberIndex(currentParagraph, newLevel);
+            newPrefix = getNumberPrefix(newLevel, info.numberIndex);
+        }
+
+        String newText = newPrefix + " " + cleanText;
+        editor.replaceText(paraStart, paraEnd, newText + "\n");
+
+        int leftPadding = 20 + (newLevel * 20);
+        editor.setParagraphStyle(currentParagraph, String.format("-fx-padding: 0 0 0 %dpx;", leftPadding));
 
         editor.requestFocus();
     }
@@ -1262,12 +1725,8 @@ public class MainApp extends Application {
             style.append("-fx-strikethrough: true; ");
         }
 
-        // Super/Subscript
-        if (superBtn.isSelected()) {
-            style.append("-fx-font-size: 10px; -fx-translate-y: -4px; ");
-        } else if (subBtn.isSelected()) {
-            style.append("-fx-font-size: 10px; -fx-translate-y: 2px; ");
-        }
+        // Note: Superscript/Subscript now handled via Unicode character conversion (see
+        // UnicodeConverter)
 
         // Color
         Color color = textColorPicker.getValue();
@@ -1399,13 +1858,88 @@ public class MainApp extends Application {
         try {
             FileInputStream fis = new FileInputStream(file);
             XWPFDocument document = new XWPFDocument(fis);
-            StringBuilder content = new StringBuilder();
-            for (XWPFParagraph paragraph : document.getParagraphs()) {
-                content.append(paragraph.getText());
-                content.append("\n");
+            CustomEditor editor = getCurrentEditor();
+
+            // Clear existing content
+            editor.replaceText("");
+
+            List<XWPFParagraph> paragraphs = document.getParagraphs();
+            int pIndex = 0;
+
+            for (XWPFParagraph paragraph : paragraphs) {
+                // 1. Build Paragraph Style
+                StringBuilder pStyle = new StringBuilder();
+
+                // Alignment
+                ParagraphAlignment align = paragraph.getAlignment();
+                if (align != null) {
+                    switch (align) {
+                        case CENTER:
+                            pStyle.append("-fx-text-alignment: center;");
+                            break;
+                        case RIGHT:
+                            pStyle.append("-fx-text-alignment: right;");
+                            break;
+                        case BOTH:
+                            pStyle.append("-fx-text-alignment: justify;");
+                            break;
+                        default:
+                            pStyle.append("-fx-text-alignment: left;");
+                    }
+                }
+
+                // Indentation & Spacing
+                int leftPx = (int) convertTwipsToPx(paragraph.getIndentationLeft());
+                int topPx = (int) convertTwipsToPx(paragraph.getSpacingBefore());
+                int bottomPx = (int) convertTwipsToPx(paragraph.getSpacingAfter());
+
+                if (leftPx > 0 || topPx > 0 || bottomPx > 0) {
+                    pStyle.append(String.format("-fx-padding: %dpx 0 %dpx %dpx;", topPx, bottomPx, leftPx));
+                }
+
+                // 2. Process Runs
+                for (XWPFRun run : paragraph.getRuns()) {
+                    StringBuilder rStyle = new StringBuilder();
+                    String text = run.text();
+                    if (text == null)
+                        continue;
+
+                    if (run.isBold())
+                        rStyle.append("-fx-font-weight: bold;");
+                    if (run.isItalic())
+                        rStyle.append("-fx-font-style: italic;");
+                    if (run.getUnderline() != UnderlinePatterns.NONE)
+                        rStyle.append("-fx-underline: true;");
+
+                    String color = run.getColor();
+                    if (color != null)
+                        rStyle.append("-fx-fill: #").append(color).append(";");
+
+                    String family = run.getFontFamily();
+                    if (family != null)
+                        rStyle.append("-fx-font-family: '").append(family).append("';");
+
+                    int size = run.getFontSize();
+                    if (size > 0)
+                        rStyle.append("-fx-font-size: ").append(size).append("px;");
+
+                    // Insert text with style
+                    int start = editor.getLength();
+                    editor.replaceText(start, start, text, rStyle.toString());
+                }
+
+                // End of paragraph - insert newline
+                int len = editor.getLength();
+                editor.replaceText(len, len, "\n", "");
+
+                // Apply Paragraph Style
+                if (pIndex < editor.getParagraphs().size()) {
+                    editor.setParagraphStyle(pIndex, pStyle.toString());
+                }
+
+                pIndex++;
             }
 
-            getCurrentEditor().replaceText(content.toString());
             document.close();
             fis.close();
         } catch (IOException e) {
@@ -1413,11 +1947,169 @@ public class MainApp extends Application {
         }
     }
 
+    // ===== DOCX HELPER METHODS =====
+
+    private static final int TWIPS_PER_INCH = 1440;
+    private static final int PIXELS_PER_INCH = 96; // Standard screen DPI
+
+    private int convertPxToTwips(double px) {
+        return (int) (px * TWIPS_PER_INCH / PIXELS_PER_INCH);
+    }
+
+    private double convertTwipsToPx(int twips) {
+        return (double) twips * PIXELS_PER_INCH / TWIPS_PER_INCH;
+    }
+
+    private String extractStyleValue(String style, String property) {
+        if (style == null || style.isEmpty())
+            return null;
+
+        int index = style.indexOf(property + ":");
+        if (index == -1)
+            return null;
+
+        int start = index + property.length() + 1;
+        int end = style.indexOf(";", start);
+        if (end == -1)
+            end = style.length();
+
+        return style.substring(start, end).trim();
+    }
+
     private void saveAsDocx(File file) {
         try (XWPFDocument document = new XWPFDocument()) {
-            XWPFParagraph paragraph = document.createParagraph();
-            XWPFRun run = paragraph.createRun();
-            run.setText(getCurrentEditor().getText());
+            CustomEditor editor = getCurrentEditor();
+            int numParagraphs = editor.getParagraphs().size();
+
+            for (int i = 0; i < numParagraphs; i++) {
+                XWPFParagraph docParagraph = document.createParagraph();
+                String paragraphStyle = editor.getParagraph(i).getParagraphStyle();
+
+                // 1. Paragraph Formatting
+
+                // Alignment
+                String align = extractStyleValue(paragraphStyle, "-fx-text-alignment");
+                if (align != null) {
+                    switch (align.toLowerCase()) {
+                        case "center":
+                            docParagraph.setAlignment(ParagraphAlignment.CENTER);
+                            break;
+                        case "right":
+                            docParagraph.setAlignment(ParagraphAlignment.RIGHT);
+                            break;
+                        case "justify":
+                            docParagraph.setAlignment(ParagraphAlignment.BOTH);
+                            break;
+                        default:
+                            docParagraph.setAlignment(ParagraphAlignment.LEFT);
+                    }
+                }
+
+                // Indentation & Spacing (from padding)
+                // Format: top right bottom left
+                String padding = extractStyleValue(paragraphStyle, "-fx-padding");
+                if (padding != null) {
+                    // Extract values, remove "px", trim
+                    String[] parts = padding.replaceAll("px", "").trim().split("\\s+");
+                    if (parts.length == 4) {
+                        try {
+                            int top = Integer.parseInt(parts[0]);
+                            int bottom = Integer.parseInt(parts[2]);
+                            int left = Integer.parseInt(parts[3]);
+
+                            if (left > 0)
+                                docParagraph.setIndentationLeft(convertPxToTwips(left));
+                            if (top > 0)
+                                docParagraph.setSpacingBefore(convertPxToTwips(top));
+                            if (bottom > 0)
+                                docParagraph.setSpacingAfter(convertPxToTwips(bottom));
+                        } catch (NumberFormatException e) {
+                            // Ignore style parsing errors
+                        }
+                    }
+                }
+
+                // Line Spacing
+                String lineSpacing = extractStyleValue(paragraphStyle, "-fx-line-spacing");
+                if (lineSpacing != null) {
+                    try {
+                        String clean = lineSpacing.replace("em", "").trim();
+                        double val = Double.parseDouble(clean);
+                        // POI line spacing: 240 = 1 line. Logic: (val / 1.2 + 1) roughly?
+                        // Simplified: CSS line-spacing adds EXTRA space.
+                        // approximate mapping: 1.0 -> 240, 1.5 -> 360
+                        // Our val is like "0.6em" for 1.5 spacing (offset).
+                        // Let's use ComboBox value logic reverse?
+                        // apply logic was: (spacingValue - 1.0) * 1.2
+                        // so spacingValue = (val / 1.2) + 1.0
+                        double spacingMult = (val / 1.2) + 1.0;
+                        // Set to "Auto" line spacing with multiplier
+                        docParagraph.setSpacingBetween(spacingMult);
+                    } catch (Exception e) {
+                    }
+                }
+
+                // 2. Run Styling (Character formatting)
+                var segments = editor.getParagraph(i).getStyledSegments();
+                for (var segment : segments) {
+                    // Check if it's a text segment
+                    if (segment.getSegment().isLeft()) {
+                        String text = segment.getSegment().getLeft();
+                        if (text.isEmpty())
+                            continue;
+
+                        XWPFRun run = docParagraph.createRun();
+                        run.setText(text);
+
+                        String style = segment.getStyle();
+                        if (style != null && !style.isEmpty()) {
+                            // Bold
+                            if (style.contains("-fx-font-weight: bold"))
+                                run.setBold(true);
+
+                            // Italic
+                            if (style.contains("-fx-font-style: italic"))
+                                run.setItalic(true);
+
+                            // Underline
+                            if (style.contains("-fx-underline: true"))
+                                run.setUnderline(UnderlinePatterns.SINGLE);
+
+                            // Color
+                            String color = extractStyleValue(style, "-fx-fill");
+                            if (color != null) {
+                                // Remove # and set
+                                run.setColor(color.replace("#", ""));
+                            }
+
+                            // Highlight
+                            String highlight = extractStyleValue(style, "-fx-background-color");
+                            if (highlight != null) {
+                                // POI specific highlighting is complex enum mapping.
+                                // For now, let's skip mapping arbitrary hex to closest enum.
+                            }
+
+                            // Font Family
+                            String family = extractStyleValue(style, "-fx-font-family");
+                            if (family != null)
+                                run.setFontFamily(family.replace("'", ""));
+
+                            // Font Size
+                            String size = extractStyleValue(style, "-fx-font-size");
+                            if (size != null) {
+                                try {
+                                    double sizePx = Double.parseDouble(size.replace("px", ""));
+                                    // PX to Points? JavaFX size often roughly equals points
+                                    run.setFontSize((int) sizePx);
+                                } catch (Exception e) {
+                                }
+                            }
+                        }
+                    }
+                    // TODO: Handle Images (Either.right)
+                }
+            }
+
             document.write(new FileOutputStream(file));
         } catch (IOException e) {
             showError("Error saving file", e.getMessage());
@@ -1427,21 +2119,41 @@ public class MainApp extends Application {
     private void saveFile(Stage stage) {
         FileChooser chooser = new FileChooser();
         chooser.setTitle("Save Document");
-        chooser.getExtensionFilters().addAll(
-                new FileChooser.ExtensionFilter("Text Files", "*.txt"),
-                new FileChooser.ExtensionFilter("All Files", "*.*"),
-                new FileChooser.ExtensionFilter("Word Documents", "*.docx"));
+        FileChooser.ExtensionFilter txtFilter = new FileChooser.ExtensionFilter("Text Files (*.txt)", "*.txt");
+        FileChooser.ExtensionFilter docxFilter = new FileChooser.ExtensionFilter("Word Documents (*.docx)", "*.docx");
+        FileChooser.ExtensionFilter allFilter = new FileChooser.ExtensionFilter("All Files", "*.*");
+
+        chooser.getExtensionFilters().addAll(txtFilter, docxFilter, allFilter);
 
         if (currentFile != null) {
             chooser.setInitialFileName(currentFile.getName());
+        } else {
+            chooser.setInitialFileName("Untitled");
         }
 
         File file = chooser.showSaveDialog(stage);
         if (file != null) {
-            if (file.getName().endsWith(".docx")) {
+            FileChooser.ExtensionFilter selectedFilter = chooser.getSelectedExtensionFilter();
+            String path = file.getAbsolutePath();
+
+            // Auto-append extension if missing
+            if (selectedFilter == docxFilter) {
+                if (!path.toLowerCase().endsWith(".docx")) {
+                    file = new File(path + ".docx");
+                }
                 saveAsDocx(file);
-            } else {
+            } else if (selectedFilter == txtFilter) {
+                if (!path.toLowerCase().endsWith(".txt")) {
+                    file = new File(path + ".txt");
+                }
                 saveToFile(file, stage);
+            } else {
+                // All files or logic fallback
+                if (path.toLowerCase().endsWith(".docx")) {
+                    saveAsDocx(file);
+                } else {
+                    saveToFile(file, stage);
+                }
             }
         }
     }

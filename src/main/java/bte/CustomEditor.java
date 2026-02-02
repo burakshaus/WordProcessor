@@ -27,8 +27,9 @@ public class CustomEditor extends GenericStyledArea<String, Either<String, Node>
                     String style = styledSegment.getStyle();
                     if (segment.isLeft()) {
                         TextExt text = new TextExt(segment.getLeft());
-                        if (style != null && !style.isEmpty())
+                        if (style != null && !style.isEmpty()) {
                             text.setStyle(style);
+                        }
                         return text;
                     } else {
                         return segment.getRight();

@@ -17,7 +17,13 @@ The goal of this project is to create a **fully-functional Microsoft Word altern
 
 ## ✨ Features
 
-* **Rich Text Editing:** Full support for standard text formatting (Bold, Italic, Underline, Fonts, Colors).
+* **Rich Text Editing:** Full support for standard text formatting (Bold, Italic, Underline, Strikethrough, Super/Subscript, Fonts, Colors, Highlights).
+* **📝 Paragraph Formatting:**
+    * **Line Spacing:** Adjustable line spacing (1.0x - 3.0x) for better readability.
+    * **Indentation:** Increase/decrease indentation with toolbar buttons or keyboard shortcuts.
+    * **Paragraph Spacing:** Control spacing before and after paragraphs.
+    * **Multi-Level Lists:** Enhanced bullets (•, ○, ■) and numbering (1, a, i) with Tab/Shift+Tab support.
+    * **Auto-Numbering:** Smart sequential numbering that automatically renumbers items.
 * **🖼️ Resizable Images:** Insert images and resize them dynamically within the editor using drag handles.
 * **📊 Interactive Table Builder:**
     * **Visual Grid Picker:** Create tables by hovering over a grid (similar to MS Word).
@@ -42,10 +48,11 @@ This table compares the current implementation status with Microsoft Word. Featu
 | Text Highlight Color | ✅ | ✅ |
 | **Paragraph Formatting** |  |  |
 | Text Alignment (Left, Center, Right, Justify) | ✅ | ✅ |
-| Line Spacing | 🔄 | ✅ |
-| Paragraph Spacing | 🔄 | ✅ |
-| Indentation | 🔄 | ✅ |
-| Bullets & Numbering | 🔄 | ✅ |
+| Line Spacing | ✅ | ✅ |
+| Paragraph Spacing | ✅ | ✅ |
+| Indentation | ✅ | ✅ |
+| Bullets & Numbering | ✅ | ✅ |
+| Multi-Level Lists | ✅ | ✅ |
 | **Content Insertion** |  |  |
 | Insert Image | ✅ | ✅ |
 | Resizable Images | ✅ | ✅ |
@@ -138,6 +145,12 @@ The project follows a standard Maven structure with the `bte` (Better Text Edito
 ### Editing a Table
 * **Right-click** on any cell in the table to open the context menu.
 * Choose options like **"Delete Row"**, **"Delete Column"**, or **"Delete Table"**.
+
+### Creating Multi-Level Lists
+1. Click the **Bullet** or **Numbered List** button on the toolbar.
+2. Press **Tab** to increase the list level (e.g., • → ○ → ■).
+3. Press **Shift+Tab** to decrease the list level.
+4. Use the **indentation buttons** (← →) as an alternative to Tab keys.
 
 ## 🤝 Contributing
 

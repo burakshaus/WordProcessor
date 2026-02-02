@@ -120,3 +120,14 @@
 .styled-text-area .caret {
     -fx-stroke-width: 2px;
 }
+
+/* Superscript and Subscript */
+.superscript {
+    -fx-font-size: 10px;
+    -fx-translate-y: -8px;
+}
+
+.subscript {
+    -fx-font-size: 10px;
+    -fx-translate-y: 4px;
+}
