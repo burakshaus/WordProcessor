@@ -69,6 +69,7 @@ public class MainApp extends Application {
     private ColorPicker highlightPicker;
     private Button insertImageBtn;
     private Button insertTableBtn;
+    private Button insertHyperlinkBtn;
     private ToggleButton bulletListBtn;
     private ToggleButton numberedListBtn;
 
@@ -493,6 +494,9 @@ public class MainApp extends Application {
         MenuItem tableItem = new MenuItem("Table...");
         tableItem.setOnAction(e -> insertTable(stage));
 
+        MenuItem hyperlinkItem = new MenuItem("Hyperlink...");
+        hyperlinkItem.setOnAction(e -> insertHyperlink(stage));
+
         MenuItem headerItem = new MenuItem("Header...");
         headerItem.setOnAction(e -> showHeaderDialog(stage));
 
@@ -502,7 +506,7 @@ public class MainApp extends Application {
         MenuItem pageNumberItem = new MenuItem("Page Numbers...");
         pageNumberItem.setOnAction(e -> showPageNumberDialog(stage));
 
-        insertMenu.getItems().addAll(imageItem, tableItem, new SeparatorMenuItem(),
+        insertMenu.getItems().addAll(imageItem, tableItem, hyperlinkItem, new SeparatorMenuItem(),
                 headerItem, footerItem, pageNumberItem);
         return insertMenu;
     }
@@ -647,6 +651,13 @@ public class MainApp extends Application {
         // Artık picker'ı çağırıyoruz ve butonu (tableButton) parametre veriyoruz
         insertTableBtn.setOnAction(e -> ContentInserter.openTablePicker(getCurrentEditor(), insertTableBtn));
 
+        // Hyperlink button
+        insertHyperlinkBtn = new Button();
+        insertHyperlinkBtn.setGraphic(createIcon(
+                "M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5z"));
+        insertHyperlinkBtn.setTooltip(new Tooltip("Insert Hyperlink"));
+        insertHyperlinkBtn.setOnAction(e -> insertHyperlink(stage));
+
         javafx.scene.control.ToggleButton themeToggle = new javafx.scene.control.ToggleButton("🌙");
         themeToggle.setStyle("-fx-font-size: 14px; -fx-min-width: 40px;");
 
@@ -726,7 +737,7 @@ public class MainApp extends Application {
                 new Separator(),
                 wordColorBtn, wordHighlightBtn,
                 new Separator(),
-                insertImageBtn, insertTableBtn,
+                insertImageBtn, insertTableBtn, insertHyperlinkBtn,
                 new Separator(),
                 alignLeftBtn, alignCenterBtn, alignRightBtn, alignJustifyBtn,
                 new Separator(),
@@ -1496,6 +1507,11 @@ public class MainApp extends Application {
 
     private void insertTable(Stage stage) {
         ContentInserter.openTablePicker(getCurrentEditor(), insertTableBtn);
+        isDirty = true;
+    }
+
+    private void insertHyperlink(Stage stage) {
+        ContentInserter.insertHyperlink(getCurrentEditor(), stage);
         isDirty = true;
     }
 

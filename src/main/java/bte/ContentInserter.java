@@ -1,20 +1,21 @@
 package bte;
 
 import javafx.scene.Node;
-import javafx.scene.control.ContextMenu;
-import javafx.scene.control.MenuItem;
-import javafx.scene.control.SeparatorMenuItem;
-import javafx.scene.control.TextField;
+import javafx.scene.control.*;
 import javafx.scene.image.Image;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.Pane;
 import javafx.scene.layout.Priority;
 import javafx.stage.FileChooser;
 import javafx.stage.Stage;
+import javafx.geometry.Insets;
 
+import java.awt.Desktop;
 import java.io.File;
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 public class ContentInserter {
 
@@ -29,6 +30,80 @@ public class ContentInserter {
             Image image = new Image(file.toURI().toString());
             ResizableImageView imageView = new ResizableImageView(image, 400);
             editor.insertImage(imageView);
+        }
+    }
+
+    public static void insertHyperlink(CustomEditor editor, Stage stage) {
+        // Create dialog
+        Dialog<ButtonType> dialog = new Dialog<>();
+        dialog.setTitle("Hyperlink Ekle");
+        dialog.setHeaderText("Link bilgilerini girin:");
+
+        // Set button types
+        ButtonType insertButtonType = new ButtonType("Ekle", ButtonBar.ButtonData.OK_DONE);
+        dialog.getDialogPane().getButtonTypes().addAll(insertButtonType, ButtonType.CANCEL);
+
+        // Create form
+        GridPane grid = new GridPane();
+        grid.setHgap(10);
+        grid.setVgap(10);
+        grid.setPadding(new Insets(20, 150, 10, 10));
+
+        TextField urlField = new TextField();
+        urlField.setPromptText("https://example.com");
+        TextField textField = new TextField();
+        textField.setPromptText("Görünen metin");
+
+        grid.add(new Label("URL:"), 0, 0);
+        grid.add(urlField, 1, 0);
+        grid.add(new Label("Metin:"), 0, 1);
+        grid.add(textField, 1, 1);
+
+        dialog.getDialogPane().setContent(grid);
+
+        // Request focus on URL field
+        javafx.application.Platform.runLater(() -> urlField.requestFocus());
+
+        // Show dialog and process result
+        Optional<ButtonType> result = dialog.showAndWait();
+        if (result.isPresent() && result.get() == insertButtonType) {
+            String url = urlField.getText().trim();
+            String displayText = textField.getText().trim();
+
+            // Validation
+            if (url.isEmpty()) {
+                Alert alert = new Alert(Alert.AlertType.ERROR);
+                alert.setTitle("Hata");
+                alert.setHeaderText("URL boş olamaz");
+                alert.setContentText("Lütfen geçerli bir URL girin.");
+                alert.showAndWait();
+                return;
+            }
+
+            // Use URL as display text if not provided
+            if (displayText.isEmpty()) {
+                displayText = url;
+            }
+
+            // Create hyperlink
+            Hyperlink hyperlink = new Hyperlink(displayText);
+            hyperlink.setStyle("-fx-text-fill: #0066cc; -fx-underline: true;");
+
+            // Set click handler
+            hyperlink.setOnAction(e -> {
+                try {
+                    Desktop.getDesktop().browse(new URI(url));
+                } catch (Exception ex) {
+                    Alert alert = new Alert(Alert.AlertType.ERROR);
+                    alert.setTitle("Hata");
+                    alert.setHeaderText("Link açılamadı");
+                    alert.setContentText("URL açılırken bir hata oluştu: " + ex.getMessage());
+                    alert.showAndWait();
+                }
+            });
+
+            // Insert hyperlink
+            editor.insertHyperlink(hyperlink);
         }
     }
 
