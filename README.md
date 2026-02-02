@@ -103,7 +103,7 @@ This table compares the current implementation status with Microsoft Word. Featu
 
 ### Prerequisites
 
-* **Java JDK** (17 or higher recommended)
+* **Java JDK** (21 or higher recommended)
 * **Maven** (Build tool)
 
 ### Installation
