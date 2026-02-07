@@ -81,6 +81,7 @@ public class MainApp extends Application {
     private Button increaseIndentBtn;
     private Button decreaseIndentBtn;
     private MenuButton paragraphSpacingBtn;
+    private ComboBox<String> stylesCombo;
 
     // Microsoft Word Standard Color Palette (4 rows x 5 colors = 20 total)
     // Row 1: Theme Colors - Dark variants
@@ -565,8 +566,11 @@ public class MainApp extends Application {
         MenuItem pageNumberItem = new MenuItem("Page Numbers...");
         pageNumberItem.setOnAction(e -> showPageNumberDialog(stage));
 
+        MenuItem tocItem = new MenuItem("Table of Contents");
+        tocItem.setOnAction(e -> insertTableOfContents());
+
         insertMenu.getItems().addAll(imageItem, tableItem, hyperlinkItem, new SeparatorMenuItem(),
-                headerItem, footerItem, pageNumberItem);
+                headerItem, footerItem, pageNumberItem, new SeparatorMenuItem(), tocItem);
         return insertMenu;
     }
 
@@ -794,6 +798,8 @@ public class MainApp extends Application {
                 new Separator(),
                 growBtn, shrinkBtn,
                 new Separator(),
+                createStylesCombo(),
+                new Separator(),
                 wordColorBtn, wordHighlightBtn,
                 new Separator(),
                 insertImageBtn, insertTableBtn, insertHyperlinkBtn,
@@ -865,6 +871,40 @@ public class MainApp extends Application {
 
         paragraphSpacingBtn.getItems().addAll(beforeMenu, afterMenu);
         return paragraphSpacingBtn;
+    }
+
+    private ComboBox<String> createStylesCombo() {
+        stylesCombo = new ComboBox<>();
+
+        // Tüm stillerin display name'lerini ekle
+        for (StyleManager.TextStyle style : StyleManager.ALL_STYLES) {
+            stylesCombo.getItems().add(style.getDisplayName());
+        }
+
+        stylesCombo.setValue("Normal");
+        stylesCombo.setTooltip(new Tooltip("Text Styles"));
+        stylesCombo.setPrefWidth(120);
+
+        stylesCombo.setOnAction(e -> {
+            String selectedStyleName = stylesCombo.getValue();
+            if (selectedStyleName == null)
+                return;
+
+            // Display name'den TextStyle bul
+            StyleManager.TextStyle selectedStyle = null;
+            for (StyleManager.TextStyle style : StyleManager.ALL_STYLES) {
+                if (style.getDisplayName().equals(selectedStyleName)) {
+                    selectedStyle = style;
+                    break;
+                }
+            }
+
+            if (selectedStyle != null) {
+                StyleManager.applyStyle(getCurrentEditor(), selectedStyle);
+            }
+        });
+
+        return stylesCombo;
     }
 
     private void applyParagraphSpacing(Integer before, Integer after) {
@@ -2378,6 +2418,30 @@ public class MainApp extends Application {
         });
 
         dialog.showAndWait();
+    }
+
+    private void insertTableOfContents() {
+        CustomEditor editor = getCurrentEditor();
+        if (editor == null) {
+            showError("Error", "No editor available.");
+            return;
+        }
+
+        // TOC oluştur ve ekle
+        javafx.scene.layout.VBox tocBox = TOCManager.createAndInsertTOC(editor);
+
+        if (tocBox == null) {
+            // Başlık bulunamadı
+            showError("No Headings Found",
+                    "No headings were found in the document.\n\n" +
+                            "To create a table of contents:\n" +
+                            "1. Apply 'Heading 1', 'Heading 2', or 'Heading 3' styles to your text\n" +
+                            "2. Use the 'Text Styles' dropdown in the toolbar\n" +
+                            "3. Then insert the table of contents again");
+        } else {
+            // TOC başarıyla eklendi
+            // TOC başarıyla eklendi - hiçbir şey yapma, kullanıcı görecek
+        }
     }
 
     private void showPageNumberDialog(Stage stage) {
